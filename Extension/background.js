@@ -177,8 +177,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === "GET_LEETCODE_CONNECTION_STATUS") {
+    fetchLoggedInUsername()
+      .then((username) => sendResponse({ connected: !!username, username }))
+      .catch((err) => {
+        console.error("Couldn't check LeetCode connection status:", err);
+        sendResponse({ connected: false, username: null });
+      });
+    return true;
+  }
+
   if (message.type === "START_HISTORY_IMPORT") {
-    startHistoryImport(); // fire-and-forget — progress is reported via HISTORY_IMPORT_PROGRESS + storage
+    startHistoryImport(!!message.force); // fire-and-forget — progress is reported via HISTORY_IMPORT_PROGRESS + storage
     sendResponse({ started: true });
     return;
   }
@@ -492,7 +502,7 @@ async function cancelHistoryImport() {
 // is treated as dead, not actually in progress.
 const HISTORY_IMPORT_STALE_MS = 2 * 60 * 1000;
 
-async function startHistoryImport() {
+async function startHistoryImport(force = false) {
   const { githubToken, githubRepo } = await chrome.storage.local.get(["githubToken", "githubRepo"]);
   let state = await getHistoryImportState();
 
@@ -510,6 +520,17 @@ async function startHistoryImport() {
     return;
   }
 
+  // "Force" is the deliberate, guaranteed-thorough re-check (e.g. right
+  // before pointing this at a real repo) — it always restarts from the very
+  // beginning and reprocesses every single submission, ignoring every cache
+  // below. A normal run resumes from wherever it left off.
+  if (force) {
+    state = {
+      status: "idle", offset: 0, processedSlugs: [], imported: 0, failed: 0,
+      currentTitle: null, lastError: null, startedAt: null, updatedAt: null,
+    };
+  }
+
   historyImportCancelRequested = false;
   state.status = "running";
   state.startedAt = state.startedAt || new Date().toISOString();
@@ -519,6 +540,28 @@ async function startHistoryImport() {
   // Resuming an interrupted import picks up from the saved offset/slug set,
   // instead of starting over and re-pushing everything from scratch.
   const processedSet = new Set(state.processedSlugs);
+  const [owner, repo] = githubRepo.split("/");
+
+  // Per-problem "as of which submission have we last actually synced this"
+  // cache. Comparing LeetCode's submission timestamp against this is what
+  // lets a normal (non-force) run correctly notice a resubmission or
+  // language change that happened while the extension was off, instead of
+  // treating "a file already exists" as good enough forever.
+  const { problemSyncTimestamps = {} } = await chrome.storage.local.get(["problemSyncTimestamps"]);
+
+  // Only used as a fallback for problems this cache has never seen (e.g. a
+  // fresh install pointed at a repo populated by an earlier install, or by
+  // the Python scripts) — assumes an existing file is up to date. Fetched
+  // at most once per run, and only if actually needed.
+  let githubTitleSetPromise = null;
+  const getGithubTitleSet = () => {
+    if (!githubTitleSetPromise) {
+      githubTitleSetPromise = listAllGithubProblems(owner, repo, githubToken).then(
+        (problems) => new Set(problems.map((p) => p.sanitizedTitle))
+      );
+    }
+    return githubTitleSetPromise;
+  };
 
   try {
     while (true) {
@@ -545,16 +588,44 @@ async function startHistoryImport() {
         // latest accepted version — anything after that is a duplicate.
         if (processedSet.has(sub.titleSlug)) continue;
 
+        const subTimestamp = Number(sub.timestamp);
+        let needsProcessing = true;
+
+        if (!force) {
+          const knownTimestamp = problemSyncTimestamps[sub.titleSlug];
+          if (knownTimestamp !== undefined) {
+            // Precise record exists — trust it exactly. Newer submission
+            // timestamp means a resubmission/language-change happened since
+            // we last synced this problem.
+            needsProcessing = subTimestamp > knownTimestamp;
+          } else {
+            // No local record — cheap existence-only fallback (no GraphQL).
+            const titleSet = await getGithubTitleSet();
+            needsProcessing = !titleSet.has(sanitizeTitle(sub.title));
+          }
+        }
+
+        if (!needsProcessing) {
+          // Cheap skip — no GraphQL call, no GitHub write. Seed the precise
+          // timestamp now so future runs use the fast path directly instead
+          // of repeating the existence-check fallback every time.
+          problemSyncTimestamps[sub.titleSlug] = subTimestamp;
+          processedSet.add(sub.titleSlug);
+          continue;
+        }
+
         state.currentTitle = sub.title;
         await saveHistoryImportState(state);
 
         const result = await handleAcceptedSubmission(sub.id, sub.titleSlug, { updateReadmeAfter: false });
 
+        problemSyncTimestamps[sub.titleSlug] = subTimestamp;
         processedSet.add(sub.titleSlug);
         state.processedSlugs = Array.from(processedSet);
         if (result.ok) state.imported += 1;
         else state.failed += 1;
         await saveHistoryImportState(state);
+        await chrome.storage.local.set({ problemSyncTimestamps });
 
         await new Promise((r) => setTimeout(r, HISTORY_IMPORT_DELAY_MS));
       }
@@ -564,7 +635,6 @@ async function startHistoryImport() {
 
       // Batched refresh: once per page rather than once per problem, so a
       // large import doesn't produce hundreds of extra README commits.
-      const [owner, repo] = githubRepo.split("/");
       await updateReadme(owner, repo, githubToken);
 
       if (!page?.hasNext) break;
@@ -573,9 +643,9 @@ async function startHistoryImport() {
     state.status = "completed";
     state.currentTitle = null;
     await saveHistoryImportState(state);
+    await chrome.storage.local.set({ problemSyncTimestamps });
 
     // Final pass to be certain the README reflects everything imported.
-    const [owner, repo] = githubRepo.split("/");
     await updateReadme(owner, repo, githubToken);
 
     console.log(`History import complete: ${state.imported} imported, ${state.failed} failed.`);
@@ -587,6 +657,7 @@ async function startHistoryImport() {
     state.status = "error";
     state.lastError = err.message || String(err);
     await saveHistoryImportState(state);
+    await chrome.storage.local.set({ problemSyncTimestamps });
   }
 }
 
@@ -1233,6 +1304,7 @@ async function listAllGithubProblems(owner, repo, token) {
       if (!match) continue;
       problems.push({
         frontendId: match[1],
+        sanitizedTitle: match[2],
         titleGuess: match[2].replace(/_/g, " "),
         extension: match[3].toLowerCase(),
         folder: folder.name,
@@ -1407,6 +1479,17 @@ async function pushToGitHub(titleSlug, question, code, langName, { updateReadmeA
   // next — this is what lets the README checklist reflect every topic a
   // solved problem touches, not just the one folder its file lives in.
   await mergeTopicTagsCache(question.questionFrontendId, question.topicTags);
+
+  // Also mark it as synced "as of now" — LeetCode's own submission timestamp
+  // isn't available on this path, but "now" is always <= a real future
+  // resubmission's timestamp, so a later import will still correctly detect
+  // and reprocess a genuine resubmission/language-change without ever
+  // risking a false "nothing changed" skip.
+  if (titleSlug) {
+    const { problemSyncTimestamps = {} } = await chrome.storage.local.get(["problemSyncTimestamps"]);
+    problemSyncTimestamps[titleSlug] = Math.floor(Date.now() / 1000);
+    await chrome.storage.local.set({ problemSyncTimestamps });
+  }
 
   const { githubToken, githubRepo } = await chrome.storage.local.get(["githubToken", "githubRepo"]);
   if (!githubToken || !githubRepo) {
