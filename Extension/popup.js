@@ -1,5 +1,20 @@
 console.log("Kodelith: popup loaded.");
 
+// Checks the LeetCode session directly (via the extension's own cookie-based
+// access), independent of which tab is currently active — so this works
+// even if LeetCode isn't the tab in front, as long as the user is logged in
+// somewhere in this browser.
+const leetcodeStatusDiv = document.getElementById("leetcodeStatus");
+chrome.runtime.sendMessage({ type: "GET_LEETCODE_CONNECTION_STATUS" }, (result) => {
+  if (result && result.connected) {
+    leetcodeStatusDiv.textContent = `✅ LeetCode account connected — ${result.username}`;
+    leetcodeStatusDiv.classList.add("connected");
+  } else {
+    leetcodeStatusDiv.textContent = "⚠️ LeetCode not detected — log in at leetcode.com";
+    leetcodeStatusDiv.classList.remove("connected");
+  }
+});
+
 const tokenInput = document.getElementById("token");
 const repoInput = document.getElementById("repo");
 const saveBtn = document.getElementById("saveBtn");
@@ -272,10 +287,13 @@ function renderImportState(state) {
 
   if (state.status === "completed") {
     importProgressBarFill.style.width = "100%";
-    importStatusText.textContent = `Done — ${state.imported} imported, ${state.failed} failed.`;
+    importStatusText.textContent =
+      state.imported > 0
+        ? `Up to date — ${state.imported} problem${state.imported === 1 ? "" : "s"} synced, ${state.failed} failed.`
+        : `Up to date — nothing new to sync.`;
   } else if (state.status === "paused") {
     importProgressBarFill.style.width = `${Math.min(95, 10 + total * 2)}%`;
-    importStatusText.textContent = `Paused — ${state.imported} imported so far. Click to resume.`;
+    importStatusText.textContent = `Paused — ${state.imported} synced so far. Click to resume.`;
   } else if (state.status === "error") {
     importProgressBarFill.style.width = `${Math.min(95, 10 + total * 2)}%`;
     importStatusText.textContent = `Stopped: ${state.lastError || "unknown error"}. Click to resume.`;
@@ -293,41 +311,44 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
+function startImport(force) {
+  chrome.storage.local.get(["githubToken", "githubRepo"], (result) => {
+    if (!result.githubToken || !result.githubRepo) {
+      setStatus("Save your GitHub token + repo above before importing.", "red");
+      return;
+    }
+    chrome.runtime.sendMessage({ type: "START_HISTORY_IMPORT", force });
+    importBtn.textContent = "Cancel Import";
+    importBtn.classList.add("cancel");
+    importProgressWrap.style.display = "block";
+    importStatusText.textContent = force ? "Starting full re-check…" : "Starting…";
+  });
+}
+
+// Always safe to click directly — problems already up to date are skipped
+// cheaply (no gate/confirmation needed), so there's no reason to make the
+// user click through an "already imported" message first.
 importBtn.addEventListener("click", () => {
   chrome.runtime.sendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
     if (state && state.status === "running") {
       chrome.runtime.sendMessage({ type: "CANCEL_HISTORY_IMPORT" });
       return;
     }
+    startImport(false);
+  });
+});
 
-    if (state && state.status === "completed") {
-      importStatusText.innerHTML =
-        `History already imported (${state.imported} problems). ` +
-        `<a href="#" id="restartImportLink">Start fresh import</a>`;
-      const restartLink = document.getElementById("restartImportLink");
-      restartLink.addEventListener("click", (e) => {
-        e.preventDefault();
-        chrome.runtime.sendMessage({ type: "RESET_HISTORY_IMPORT" }, () => {
-          chrome.runtime.sendMessage({ type: "START_HISTORY_IMPORT" });
-          importBtn.textContent = "Cancel Import";
-          importBtn.classList.add("cancel");
-          importStatusText.textContent = "Starting…";
-        });
-      });
+// A deliberate, guaranteed-thorough re-check — ignores every cache and
+// reprocesses every submission from scratch. Meant for occasional use (e.g.
+// right before pointing this at a "real" repo), not everyday syncing.
+const forceReimportBtn = document.getElementById("forceReimportBtn");
+forceReimportBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
+    if (state && state.status === "running") {
+      setStatus("An import is already running — cancel it first.", "red");
       return;
     }
-
-    chrome.storage.local.get(["githubToken", "githubRepo"], (result) => {
-      if (!result.githubToken || !result.githubRepo) {
-        setStatus("Save your GitHub token + repo above before importing.", "red");
-        return;
-      }
-      chrome.runtime.sendMessage({ type: "START_HISTORY_IMPORT" });
-      importBtn.textContent = "Cancel Import";
-      importBtn.classList.add("cancel");
-      importProgressWrap.style.display = "block";
-      importStatusText.textContent = "Starting…";
-    });
+    startImport(true);
   });
 });
 
