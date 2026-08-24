@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kodelith</title>
+<style>
+:root{
+  --ink:#171717;--muted:#8a8a8a;--line:#e8e8e8;--soft:#f7f7f7;
+  --green:#2da44e;--orange:#ffa116;--github:#24292f;--sheets:#0f9d58;
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#fff}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink);-webkit-font-smoothing:antialiased;
+}
+.stage{height:100vh;width:100vw;position:relative;display:grid;place-items:center;background:#fff}
+.corner{
+  position:absolute;left:28px;top:25px;display:flex;align-items:center;gap:8px;
+  font-size:15px;font-weight:650;letter-spacing:-.25px;
+}
+.kmark{
+  width:25px;height:25px;border-radius:7px;background:#171717;color:#fff;
+  display:grid;place-items:center;font-size:12px;font-weight:750;
+}
+.footer{
+  position:absolute;bottom:25px;left:0;right:0;text-align:center;
+  color:#b5b5b5;font-size:11px;letter-spacing:.15px;
+}
+.scene{width:min(520px,92vw);height:430px;position:relative;display:grid;place-items:center}
+.card{
+  position:absolute;width:min(430px,100%);background:#fff;border:1px solid var(--line);
+  border-radius:13px;box-shadow:0 20px 55px rgba(0,0,0,.075),0 3px 12px rgba(0,0,0,.035);
+  padding:20px 21px;opacity:0;transform:translateY(15px) scale(.985);
+  transition:opacity .58s cubic-bezier(.22,1,.36,1),transform .58s cubic-bezier(.22,1,.36,1);
+  pointer-events:none;
+}
+.card.show{opacity:1;transform:none}
+.chrome{
+  display:flex;align-items:center;height:22px;margin-bottom:17px;
+}
+.dots{display:flex;gap:5px}
+.dots i{width:7px;height:7px;border-radius:50%;background:#d9d9d9}
+.address{
+  flex:1;text-align:center;color:#a2a2a2;font-size:10px;letter-spacing:.15px;
+}
+.close{color:#c9c9c9;font-size:13px}
+.head{display:flex;align-items:center;gap:13px}
+.icon{
+  width:44px;height:44px;border-radius:10px;display:grid;place-items:center;
+  flex:none;font-weight:750;
+}
+.lc{background:var(--orange);color:#fff;font-size:15px}
+.gh{background:var(--github);color:#fff;font-size:18px}
+.gs{background:var(--sheets);color:#fff;font-size:20px}
+.k{background:#171717;color:#fff;font-size:15px}
+.success{background:var(--green);color:#fff;font-size:17px}
+.h1{font-size:16px;font-weight:700;letter-spacing:-.25px}
+.sub{margin-top:3px;font-size:12px;color:var(--muted);line-height:1.45}
+.rule{height:1px;background:#f0f0f0;margin:17px 0}
+.row{
+  display:flex;align-items:center;gap:9px;font-size:12px;color:#333;padding:4px 0;
+}
+.tick{
+  width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;
+  display:grid;place-items:center;font-size:10px;flex:none;
+}
+.code{
+  margin-top:13px;padding:11px 12px;border:1px solid #ededed;border-radius:8px;
+  background:#fafafa;font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;color:#555;
+}
+.lang{
+  display:inline-block;padding:4px 8px;border-radius:999px;background:#fff4e5;
+  color:#b96800;font-size:10px;font-weight:650;
+}
+.submit-line{display:flex;justify-content:flex-end;align-items:center;gap:13px;margin-top:12px}
+.submit-label{font-size:10px;color:#9a9a9a}
+.submit{background:var(--orange);color:#fff;border-radius:6px;padding:6px 13px;font-size:11px;font-weight:650}
+.repo{
+  margin-top:13px;border:1px solid #e9e9e9;background:#fafafa;border-radius:8px;padding:11px 12px;
+}
+.repo-name{font-size:12px;font-weight:650}
+.path{font-size:10px;color:#858585;margin-top:4px}
+.bar{height:4px;border-radius:99px;background:#ededed;overflow:hidden;margin:15px 0 9px}
+.bar b{display:block;height:100%;width:0;background:var(--green);transition:width .85s ease}
+.sheet{
+  margin-top:12px;border:1px solid #e2e2e2;border-radius:8px;overflow:hidden;
+  font-size:9px;background:#fff;overflow-x:auto;
+}
+.tr{
+  display:grid;
+  grid-template-columns:58px 112px 68px 145px 62px 92px 72px;
+  min-width:609px;
+}
+.tr>span{
+  padding:8px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:opacity .35s ease;
+}
+.tr>span:last-child{border-right:0}
+.tr:last-child>span{border-bottom:0}
+.tr.head{
+  background:#f7f7f7;color:#777;font-weight:600;font-size:8.5px;
+}
+.done{color:var(--green);font-weight:700}
+.easy{color:#188038;font-weight:650}
+.medium{color:#b96800;font-weight:650}
+.github-link{color:#1a73e8;font-weight:600}
+.readme{
+  margin-top:12px;border:1px solid #e8e8e8;border-radius:8px;background:#fafafa;padding:13px;
+}
+.readme-title{font-size:12px;font-weight:700;margin-bottom:9px}
+.progress{height:5px;background:#e7e7e7;border-radius:99px;overflow:hidden}
+.progress b{display:block;width:78%;height:100%;background:#24292f}
+.checklist{display:grid;gap:6px;margin-top:10px}
+.checkitem{font-size:11px;color:#555;display:flex;gap:7px;align-items:center}
+.box{width:13px;height:13px;border-radius:3px;border:1px solid #ccc;display:grid;place-items:center;font-size:8px}
+.box.on{background:var(--green);border-color:var(--green);color:#fff}
+.import{
+  margin-top:13px;padding:10px 11px;border:1px solid #e8e8e8;border-radius:8px;
+  background:#fafafa;font-size:11px;color:#555;
+}
+.import strong{color:#171717}
+.center{text-align:center;padding:6px 0 4px}
+.center-title{font-size:25px;font-weight:730;letter-spacing:-1.1px}
+.center-accent{font-size:15px;color:var(--green);font-weight:650;margin-top:3px}
+.center-sub{font-size:12px;color:#8d8d8d;margin-top:10px}
+.line{width:28px;height:2px;background:#171717;border-radius:99px;margin:15px auto 0}
+.intro{
+  text-align:center;position:absolute;opacity:0;transform:translateY(10px);
+  transition:opacity .6s ease,transform .6s ease;pointer-events:none;
+}
+.intro.show{opacity:1;transform:none}
+.intro h1{font-size:clamp(34px,5vw,52px);letter-spacing:-2.5px;margin:0;font-weight:750}
+.intro p{margin:10px 0 0;color:#909090;font-size:13px}
+@media(max-width:500px){
+  .corner{left:18px;top:18px}.footer{bottom:18px}
+  .scene{height:390px}.card{padding:17px 16px}
+  .sheet{font-size:8.5px}
+}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="corner"><span class="kmark">K</span>Kodelith</div>
+  <div class="footer">leetcode → github automation</div>
+
+  <div class="intro" id="welcome">
+    <h1>Welcome to Kodelith</h1>
+    <p>Keep your LeetCode progress moving automatically.</p>
+  </div>
+
+  <div class="intro" id="developer">
+    <h1>Developed by Hammad Babar</h1>
+    <p>Built to make your coding progress easier to manage.</p>
+  </div>
+
+  <main class="scene">
+    <section class="card" id="leetcode">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">leetcode.com</div><div class="close">×</div></div>
+      <div class="head"><div class="icon lc">LC</div><div><div class="h1">Two Sum</div><div class="sub">Accepted submission · Java</div></div></div>
+      <div class="rule"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:650">Your solution</span><span class="lang">Java</span></div>
+      <div class="code"><span style="color:#b96800">public int[]</span> twoSum(<span style="color:#b96800">int[]</span> nums, <span style="color:#b96800">int</span> target) { … }</div>
+      <div class="submit-line"><span class="submit-label">✓ Accepted</span><span class="submit">Submit</span></div>
+    </section>
+
+    <section class="card" id="detect">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">Kodelith</div><div class="close">×</div></div>
+      <div class="head"><div class="icon success">✓</div><div><div class="h1">Submission detected</div><div class="sub">Kodelith found your accepted solution.</div></div></div>
+      <div class="rule"></div>
+      <div class="row"><span class="tick">✓</span>Captured solution and language</div>
+      <div class="row"><span class="tick">✓</span>Verified problem information</div>
+      <div class="row"><span class="tick">✓</span>Preparing automatic sync</div>
+    </section>
+
+    <section class="card" id="github">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">Kodelith → GitHub</div><div class="close">×</div></div>
+      <div class="head"><div class="icon gh">●</div><div><div class="h1">Syncing to GitHub</div><div class="sub">Your accepted solution is being pushed automatically.</div></div></div>
+      <div class="bar"><b id="bar"></b></div>
+      <div class="row"><span class="tick">✓</span><span id="syncText">Preparing repository…</span></div>
+      <div class="repo"><div class="repo-name">HammadAli-art / LeetCode</div><div class="path">Arrays / Two-Sum.java</div></div>
+    </section>
+
+    <section class="card" id="readme">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">github.com</div><div class="close">×</div></div>
+      <div class="head"><div class="icon gh">●</div><div><div class="h1">README updated</div><div class="sub">Your progress is kept in sync.</div></div></div>
+      <div class="readme">
+        <div class="readme-title">LeetCode Progress</div>
+        <div class="progress"><b></b></div>
+        <div class="checklist">
+          <div class="checkitem"><span class="box on">✓</span>Stats updated</div>
+          <div class="checkitem"><span class="box on">✓</span>Topics checklist refreshed</div>
+          <div class="checkitem"><span class="box on">✓</span>Progress table updated</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="sheets">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">sheets.google.com</div><div class="close">×</div></div>
+      <div class="head">
+        <div class="icon gs">▦</div>
+        <div>
+          <div class="h1">Google Sheets Sync</div>
+          <div class="sub">Kodelith is updating your LeetCode tracker.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="tick">✓</span>Connected to <strong>LeetCode Progress</strong>
+      </div>
+
+      <div class="sheet">
+        <div class="tr head">
+          <span>Problem ID</span>
+          <span>Title</span>
+          <span>Difficulty</span>
+          <span>Topics</span>
+          <span>Language</span>
+          <span>Date Solved</span>
+          <span>Github Link</span>
+        </div>
+
+        <div class="tr">
+          <span>1</span>
+          <span>Two Sum</span>
+          <span class="easy">Easy</span>
+          <span>Array, HashMap</span>
+          <span>Java</span>
+          <span>2026-08-24</span>
+          <span class="github-link">View</span>
+        </div>
+
+        <div class="tr">
+          <span>49</span>
+          <span>Group Anagrams</span>
+          <span class="medium">Medium</span>
+          <span>Array, HashMap, String</span>
+          <span>Java</span>
+          <span>2026-08-23</span>
+          <span class="github-link">View</span>
+        </div>
+
+        <div class="tr" id="sheetNewRow">
+          <span>704</span>
+          <span>Binary Search</span>
+          <span class="easy">Easy</span>
+          <span>Array, Binary Search</span>
+          <span>Java</span>
+          <span>2026-08-24</span>
+          <span id="sheetStatus" style="color:#999;">Syncing…</span>
+        </div>
+      </div>
+
+      <div class="row" id="sheetDone" style="opacity:.3;transition:opacity .4s">
+        <span class="tick">✓</span>New problem added to Google Sheets
+      </div>
+    </section>
+
+    <section class="card" id="backfill">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">Kodelith</div><div class="close">×</div></div>
+      <div class="head"><div class="icon lc">LC</div><div><div class="h1">Full history import</div><div class="sub">Bring your previous accepted solutions into GitHub.</div></div></div>
+      <div class="rule"></div>
+      <div class="row"><span class="tick">✓</span>Previous accepted submissions found</div>
+      <div class="row"><span class="tick">✓</span>Correct folders selected</div>
+      <div class="row"><span class="tick">✓</span>Safe, rollback-aware sync</div>
+      <div class="import"><strong>47 problems</strong> imported · <strong>0 failed</strong></div>
+    </section>
+
+    <section class="card" id="final">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="address">kodelith</div><div class="close">×</div></div>
+      <div class="center">
+        <div class="center-title">Your LeetCode. Your GitHub.</div>
+        <div class="center-accent">Automated.</div>
+        <div class="center-sub">Kodelith keeps the work moving without getting in your way.</div>
+        <div class="line"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const sleep = ms => new Promise(r => setTimeout(r,ms));
+
+async function card(el,ms){
+  el.classList.add('show');
+  await sleep(ms);
+  el.classList.remove('show');
+  await sleep(650);
+}
+
+async function demo(){
+  const welcome=document.getElementById('welcome');
+  const developer=document.getElementById('developer');
+
+  welcome.classList.add('show');
+  await sleep(3200);
+  welcome.classList.remove('show');
+  await sleep(750);
+
+  developer.classList.add('show');
+  await sleep(3200);
+  developer.classList.remove('show');
+  await sleep(750);
+
+  await card(document.getElementById('leetcode'),5200);
+  await card(document.getElementById('detect'),4200);
+
+  const github=document.getElementById('github');
+  const bar=document.getElementById('bar');
+  const syncText=document.getElementById('syncText');
+  github.classList.add('show');
+  await sleep(900);
+  bar.style.width='30%'; syncText.textContent='Creating solution file…';
+  await sleep(1200);
+  bar.style.width='68%'; syncText.textContent='Updating repository…';
+  await sleep(1200);
+  bar.style.width='100%'; syncText.textContent='Successfully pushed to GitHub';
+  await sleep(2300);
+  github.classList.remove('show');
+  await sleep(650);
+
+  await card(document.getElementById('readme'),4800);
+
+  const sheets=document.getElementById('sheets');
+  const sheetStatus=document.getElementById('sheetStatus');
+  const sheetDone=document.getElementById('sheetDone');
+  const sheetNewRow=document.getElementById('sheetNewRow');
+
+  sheets.classList.add('show');
+  await sleep(2200);
+
+  // Let the viewer read the real column structure first.
+  await sleep(1800);
+
+  // Then demonstrate Kodelith adding the latest solved problem.
+  sheetNewRow.style.background='#fbfffc';
+  sheetStatus.textContent='Syncing…';
+  await sleep(1700);
+
+  sheetStatus.textContent='View';
+  sheetStatus.className='github-link';
+  await sleep(650);
+
+  sheetDone.style.opacity='1';
+  await sleep(2200);
+
+  sheets.classList.remove('show');
+  await sleep(650);
+
+  await card(document.getElementById('backfill'),5000);
+  await card(document.getElementById('final'),4200);
+
+  bar.style.width='0%';
+  syncText.textContent='Preparing repository…';
+  sheetStatus.textContent='Syncing…';
+  sheetStatus.className='';
+  sheetDone.style.opacity='.3';
+  document.getElementById('sheetNewRow').style.background='';
+  await sleep(900);
+  demo();
+}
+demo();
+</script>
+</body>
+</html>
