@@ -860,22 +860,39 @@ async function recordFailedCleanup(filePath, frontendId, errorMessage) {
 }
 
 async function findExistingFile(owner, repo, folder, frontendId, token) {
-  // IMPORTANT: files are actually stored under "LeetCode Problems/{folder}/...",
-  // so we must look in the SAME base path here, otherwise we always think the
-  // file is new (resubmission/language-change detection silently breaks).
+  // Fast path: check the folder our current priority list says this problem
+  // belongs in — this is where the file will be, nearly all the time (1 API
+  // call, same cost as before).
   const dirPath = `${PROBLEMS_SUBDIR}/${folder}`;
-
   const response = await githubRequest(
     `/repos/${owner}/${repo}/contents/${encodeGithubPath(dirPath)}`, "GET", null, token
   );
-  if (response.status === 404) return null; // folder doesn't exist yet — definitely new
-  if (!response.ok) throw new Error(`Failed to list folder: ${response.status}`);
+  if (response.ok) {
+    const files = await response.json();
+    // Explicitly restrict to actual files, since the Contents API can also
+    // return subdirectories.
+    const match = files.find((f) => f.type === "file" && f.name.startsWith(`${frontendId}_`));
+    if (match) return match;
+  } else if (response.status !== 404) {
+    throw new Error(`Failed to list folder: ${response.status}`);
+  }
 
-  const files = await response.json();
-  // Find any file for this problem number, REGARDLESS of language/extension
-  // (e.g. "73_Set_Matrix_Zeroes.java" or "73_Set_Matrix_Zeroes.cpp" both match "73_").
-  // Explicitly restrict to actual files, since the Contents API can also return subdirectories.
-  return files.find((f) => f.type === "file" && f.name.startsWith(`${frontendId}_`)) || null;
+  // Slow-path fallback: not in the expected folder. Before concluding this
+  // problem is genuinely new, search every subfolder under "LeetCode
+  // Problems/" — this is what catches a file left behind by an OLDER
+  // folder-naming scheme (e.g. a since-renamed category), so a stale
+  // folder mapping can never produce a duplicate. Only pays this extra
+  // cost when the fast path actually misses.
+  const allProblems = await listAllGithubProblems(owner, repo, token);
+  const foundElsewhere = allProblems.find((p) => p.frontendId === String(frontendId));
+  if (!foundElsewhere) return null;
+
+  return {
+    name: `${foundElsewhere.frontendId}_${foundElsewhere.sanitizedTitle}.${foundElsewhere.extension}`,
+    path: foundElsewhere.path,
+    sha: foundElsewhere.sha,
+    type: "file",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1309,6 +1326,7 @@ async function listAllGithubProblems(owner, repo, token) {
         extension: match[3].toLowerCase(),
         folder: folder.name,
         path: f.path,
+        sha: f.sha,
       });
     }
   }
