@@ -55,6 +55,7 @@ async function fetchQuestionDetails(titleSlug) {
       question(titleSlug: $titleSlug) {
         questionFrontendId
         title
+        titleSlug
         difficulty
         topicTags { name }
       }
@@ -1282,6 +1283,17 @@ async function syncProblemToSheet(question, langName, { owner, repo, filePath })
         "POST", { values: [row] }, token
       );
     }
+
+    // Remember when THIS problem was last actually written to the sheet —
+    // compared later (in the backfill prompt) against problemSyncTimestamps
+    // ("last pushed to GitHub") to catch a resubmission/language-change that
+    // happened while Sheets sync was off, not just a problem that was never
+    // logged at all.
+    if (question.titleSlug) {
+      const { sheetSyncTimestamps = {} } = await chrome.storage.local.get(["sheetSyncTimestamps"]);
+      sheetSyncTimestamps[question.titleSlug] = Math.floor(Date.now() / 1000);
+      await chrome.storage.local.set({ sheetSyncTimestamps });
+    }
   } catch (err) {
     // Sheets sync is an optional layer on top of the real push — same
     // philosophy as README sync. Never let it report the push itself as failed.
@@ -1353,6 +1365,21 @@ async function getSheetLoggedFrontendIds(spreadsheetId, token) {
   return new Set((data.values || []).map((row) => String(row[0]).trim()));
 }
 
+// A problem needs a sheet sync if either: (a) we have a precise record of
+// when it was last pushed to GitHub, and that's newer than when it was last
+// written to the sheet — this is what catches a resubmission/language-change
+// made while Sheets sync was off; or (b) we have no such record (a file that
+// predates local tracking) and it simply isn't in the sheet at all yet.
+function needsSheetSync(titleSlugGuess, frontendId, problemSyncTimestamps, sheetSyncTimestamps, loggedIds) {
+  const pushTimestamp = problemSyncTimestamps[titleSlugGuess];
+  if (pushTimestamp !== undefined) {
+    const sheetTimestamp = sheetSyncTimestamps[titleSlugGuess];
+    return sheetTimestamp === undefined || pushTimestamp > sheetTimestamp;
+  }
+  // Cold cache — fall back to a plain existence check against the sheet.
+  return !loggedIds.has(String(frontendId));
+}
+
 async function getSheetsBackfillCandidateCount() {
   const { githubToken, githubRepo, sheetsSpreadsheetId } = await chrome.storage.local.get([
     "githubToken", "githubRepo", "sheetsSpreadsheetId",
@@ -1361,11 +1388,16 @@ async function getSheetsBackfillCandidateCount() {
   const [owner, repo] = githubRepo.split("/");
   const googleToken = await getGoogleAuthToken({ interactive: false });
 
-  const [githubProblems, loggedIds] = await Promise.all([
+  const [githubProblems, loggedIds, cache] = await Promise.all([
     listAllGithubProblems(owner, repo, githubToken),
     getSheetLoggedFrontendIds(sheetsSpreadsheetId, googleToken),
+    chrome.storage.local.get(["problemSyncTimestamps", "sheetSyncTimestamps"]),
   ]);
-  return githubProblems.filter((p) => !loggedIds.has(String(p.frontendId))).length;
+  const { problemSyncTimestamps = {}, sheetSyncTimestamps = {} } = cache;
+
+  return githubProblems.filter((p) =>
+    needsSheetSync(titleToSlugGuess(p.titleGuess), p.frontendId, problemSyncTimestamps, sheetSyncTimestamps, loggedIds)
+  ).length;
 }
 
 const SHEETS_BACKFILL_DELAY_MS = 400;
@@ -1413,11 +1445,15 @@ async function startSheetsBackfill() {
 
   try {
     const googleToken = await getGoogleAuthToken({ interactive: false });
-    const [githubProblems, loggedIds] = await Promise.all([
+    const [githubProblems, loggedIds, cache] = await Promise.all([
       listAllGithubProblems(owner, repo, githubToken),
       getSheetLoggedFrontendIds(sheetsSpreadsheetId, googleToken),
+      chrome.storage.local.get(["problemSyncTimestamps", "sheetSyncTimestamps"]),
     ]);
-    const missing = githubProblems.filter((p) => !loggedIds.has(String(p.frontendId)));
+    const { problemSyncTimestamps = {}, sheetSyncTimestamps = {} } = cache;
+    const missing = githubProblems.filter((p) =>
+      needsSheetSync(titleToSlugGuess(p.titleGuess), p.frontendId, problemSyncTimestamps, sheetSyncTimestamps, loggedIds)
+    );
 
     state.total = missing.length;
     await saveSheetsBackfillState(state);
