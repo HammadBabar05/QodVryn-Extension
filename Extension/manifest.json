@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Kodelith",
+  "name": "QodVryn",
   "version": "0.1.0",
-  "description": "Kodelith automatically syncs your accepted LeetCode submissions to GitHub with smart folder organization, an auto-updating README, and optional Google Sheets tracking.",
+  "description": "QodVryn automatically captures your accepted LeetCode submissions and syncs them to GitHub with intelligent folder organization, automatic README progress updates, full submission history import, and optional Google Sheets tracking — keeping your coding journey organized and up to date.",
 
   "icons": {
     "16": "Icons/Icon16.png",
@@ -52,7 +52,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Kodelith",
+    "default_title": "QodVryn",
     "default_icon": {
       "16": "Icons/Icon16.png",
       "32": "Icons/Icon32.png",
