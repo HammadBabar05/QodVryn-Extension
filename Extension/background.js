@@ -1,5 +1,5 @@
 // This runs in the background, independent of any specific page.
-console.log("Kodelith: background service worker loaded.");
+console.log("QodVryn: background service worker loaded.");
 
 const GRAPHQL_URL = "https://leetcode.com/graphql";
 
@@ -116,9 +116,36 @@ async function fetchAcceptedSubmissionsPage(offset, limit) {
   };
 }
 
+// Used only by Sheets Backfill, which discovers problems from GitHub
+// filenames (no submission ID / timestamp attached) rather than from
+// LeetCode's own submission list. Filtering submissionList by questionSlug
+// gets that problem's own submissions directly, so we can find its most
+// recent Accepted one and use its real timestamp for "Date Solved" instead
+// of defaulting to today's date.
+async function fetchLatestAcSubmissionTimestamp(titleSlug) {
+  const query = `
+    query questionSubmissionList($questionSlug: String!, $offset: Int!, $limit: Int!) {
+      submissionList(questionSlug: $questionSlug, offset: $offset, limit: $limit) {
+        submissions {
+          statusDisplay
+          timestamp
+        }
+      }
+    }
+  `;
+  try {
+    const data = await graphqlRequest(query, { questionSlug: titleSlug, offset: 0, limit: 5 });
+    const accepted = (data.submissionList?.submissions || []).find((s) => s.statusDisplay === "Accepted");
+    return accepted ? Number(accepted.timestamp) : null;
+  } catch (err) {
+    console.error(`Couldn't fetch AC submission date for "${titleSlug}" (non-fatal):`, err);
+    return null;
+  }
+}
+
 // Shared by BOTH the live "just solved a problem" flow AND the bulk history
 // import below, so the two paths can never drift out of sync with each other.
-async function handleAcceptedSubmission(submissionId, titleSlug, { updateReadmeAfter = true, updateSheetAfter = true } = {}) {
+async function handleAcceptedSubmission(submissionId, titleSlug, { updateReadmeAfter = true, updateSheetAfter = true, solvedTimestamp } = {}) {
   try {
     const [{ code, langName }, question] = await Promise.all([
       fetchSubmissionCode(parseInt(submissionId, 10)),
@@ -132,17 +159,17 @@ async function handleAcceptedSubmission(submissionId, titleSlug, { updateReadmeA
     // file or throw deep inside pushToGitHub with a confusing error.
     if (!question || !question.questionFrontendId) {
       const msg = `question data missing/invalid for slug: ${titleSlug}`;
-      console.error("Kodelith:", msg, question);
+      console.error("QodVryn:", msg, question);
       return { ok: false, message: msg };
     }
     if (!code || typeof code !== "string" || !code.trim()) {
       const msg = `submission code missing/empty for submission: ${submissionId}`;
-      console.error("Kodelith:", msg);
+      console.error("QodVryn:", msg);
       return { ok: false, message: msg };
     }
     if (!langName) {
       const msg = `language missing for submission: ${submissionId}`;
-      console.error("Kodelith:", msg);
+      console.error("QodVryn:", msg);
       return { ok: false, message: msg };
     }
 
@@ -152,7 +179,7 @@ async function handleAcceptedSubmission(submissionId, titleSlug, { updateReadmeA
     console.log("Topic tags:", (question.topicTags || []).map((t) => t.name));
     console.log("Language:", langName);
 
-    await pushToGitHub(titleSlug, question, code, langName, { updateReadmeAfter, updateSheetAfter });
+    await pushToGitHub(titleSlug, question, code, langName, { updateReadmeAfter, updateSheetAfter, solvedTimestamp });
     return { ok: true };
   } catch (err) {
     console.error("Failed to process submission:", err);
@@ -618,7 +645,10 @@ async function startHistoryImport(force = false) {
         state.currentTitle = sub.title;
         await saveHistoryImportState(state);
 
-        const result = await handleAcceptedSubmission(sub.id, sub.titleSlug, { updateReadmeAfter: false });
+        const result = await handleAcceptedSubmission(sub.id, sub.titleSlug, {
+          updateReadmeAfter: false,
+          solvedTimestamp: subTimestamp,
+        });
 
         problemSyncTimestamps[sub.titleSlug] = subTimestamp;
         processedSet.add(sub.titleSlug);
@@ -1243,15 +1273,19 @@ async function disableGoogleSheets() {
 // resubmission UPDATES that row instead of creating a duplicate — same
 // "GitHub/GitHub-equivalent is source of truth" principle as the code sync.
 async function findExistingSheetRow(spreadsheetId, frontendId, token) {
-  const response = await sheetsRequest(`/${spreadsheetId}/values/${SHEET_TAB_NAME}!A2:A`, "GET", null, token);
+  const response = await sheetsRequest(`/${spreadsheetId}/values/${SHEET_TAB_NAME}!A2:F`, "GET", null, token);
   if (!response.ok) return null;
   const data = await response.json();
   const rows = data.values || [];
   const rowIndex = rows.findIndex((r) => r[0] === String(frontendId));
-  return rowIndex === -1 ? null : rowIndex + 2; // +2: header row + 1-based indexing
+  if (rowIndex === -1) return null;
+  return {
+    rowNum: rowIndex + 2, // +2: header row + 1-based indexing
+    existingDate: rows[rowIndex][5] || null, // column F ("Date Solved") within this A:F read
+  };
 }
 
-async function syncProblemToSheet(question, langName, { owner, repo, filePath }) {
+async function syncProblemToSheet(question, langName, { owner, repo, filePath, solvedTimestamp }) {
   try {
     const { sheetsSpreadsheetId, sheetsEnabled } = await chrome.storage.local.get(["sheetsSpreadsheetId", "sheetsEnabled"]);
     if (!sheetsEnabled || !sheetsSpreadsheetId) return; // user hasn't turned this on — nothing to do, not an error
@@ -1260,26 +1294,56 @@ async function syncProblemToSheet(question, langName, { owner, repo, filePath })
     const frontendId = question.questionFrontendId;
     // "HEAD" resolves to whatever the repo's default branch actually is
     // (main/master/etc.) without needing an extra API call to look it up.
-    const githubLink = `https://github.com/${owner}/${repo}/blob/HEAD/${encodeGithubPath(filePath)}`;
+    const githubUrl = `https://github.com/${owner}/${repo}/blob/HEAD/${encodeGithubPath(filePath)}`;
+    // A HYPERLINK formula shows a short clickable "Solution" label instead
+    // of the full raw URL cluttering the column. Escaping " -> "" is
+    // standard formula-string escaping, in case a path ever contains one.
+    const githubLinkFormula = `=HYPERLINK("${githubUrl.replace(/"/g, '""')}", "Solution")`;
+    // Prefer LeetCode's own submission timestamp (accurate — the actual day
+    // it was solved) whenever we have it, e.g. from import/backfill. Only
+    // fall back to "today" when no better source exists, which is already
+    // correct for a live solve happening right now.
+    const existing = await findExistingSheetRow(sheetsSpreadsheetId, frontendId, token);
+
+    // A resubmission/language-change must never change "Date Solved" — that
+    // should always reflect the FIRST time this problem was ever logged.
+    // Only compute a fresh date when this row doesn't exist yet.
+    const dateSolved = existing?.existingDate
+      ? existing.existingDate
+      : solvedTimestamp
+        ? new Date(solvedTimestamp * 1000).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
     const row = [
-      frontendId,
+      // A leading apostrophe is Google Sheets' own convention for "always
+      // treat this as text" — without it, USER_ENTERED (needed below for
+      // the HYPERLINK formula in column G) would silently reinterpret a
+      // numeric-looking Problem ID as an actual Number (right-aligned,
+      // different type from every row written before this column existed).
+      `'${frontendId}`,
       question.title,
       question.difficulty || "",
       (question.topicTags || []).map((t) => t.name).join(", "),
-      langName,
-      new Date().toISOString().split("T")[0],
-      githubLink,
+      // LeetCode's submissionDetails returns the raw internal language name
+      // ("java"), not a display name — normalize it the same way Sheets
+      // Backfill already does, so a resubmission doesn't show inconsistent
+      // casing next to backfilled rows.
+      normalizeLangDisplay(langName),
+      // Same leading-apostrophe text-lock as Problem ID — otherwise
+      // USER_ENTERED would auto-convert "2026-08-27" into a real Date cell,
+      // changing its type/appearance from how it was stored before.
+      `'${dateSolved}`,
+      githubLinkFormula,
     ];
 
-    const existingRowNum = await findExistingSheetRow(sheetsSpreadsheetId, frontendId, token);
-    if (existingRowNum) {
+    if (existing) {
       await sheetsRequest(
-        `/${sheetsSpreadsheetId}/values/${SHEET_TAB_NAME}!A${existingRowNum}:G${existingRowNum}?valueInputOption=RAW`,
+        `/${sheetsSpreadsheetId}/values/${SHEET_TAB_NAME}!A${existing.rowNum}:G${existing.rowNum}?valueInputOption=USER_ENTERED`,
         "PUT", { values: [row] }, token
       );
     } else {
       await sheetsRequest(
-        `/${sheetsSpreadsheetId}/values/${SHEET_TAB_NAME}!A:G:append?valueInputOption=RAW`,
+        `/${sheetsSpreadsheetId}/values/${SHEET_TAB_NAME}!A:G:append?valueInputOption=USER_ENTERED`,
         "POST", { values: [row] }, token
       );
     }
@@ -1357,6 +1421,18 @@ const EXT_TO_LANG_DISPLAY = {
   java: "Java", py: "Python3", cpp: "C++", js: "JavaScript", c: "C",
   cs: "C#", go: "Go", kt: "Kotlin", swift: "Swift", ts: "TypeScript",
 };
+
+// LeetCode's submissionDetails query returns the raw internal language name
+// ("java", "python3", "c++" — same casing LANG_EXTENSION expects), not a
+// display name. This chains the two existing maps together so every path
+// (live push, import, backfill) ends up showing the same nicely-capitalized
+// form, instead of only backfilled rows looking "correct".
+function normalizeLangDisplay(langName) {
+  const key = (langName || "").toLowerCase();
+  const ext = LANG_EXTENSION[key];
+  if (ext && EXT_TO_LANG_DISPLAY[ext]) return EXT_TO_LANG_DISPLAY[ext];
+  return langName || ""; // unrecognized — leave as-is rather than guessing
+}
 
 async function getSheetLoggedFrontendIds(spreadsheetId, token) {
   const response = await sheetsRequest(`/${spreadsheetId}/values/${SHEET_TAB_NAME}!A2:A`, "GET", null, token);
@@ -1474,7 +1550,8 @@ async function startSheetsBackfill() {
         if (question && question.questionFrontendId) {
           const langName = EXT_TO_LANG_DISPLAY[p.extension] || p.extension.toUpperCase();
           await mergeTopicTagsCache(question.questionFrontendId, question.topicTags);
-          await syncProblemToSheet(question, langName, { owner, repo, filePath: p.path });
+          const solvedTimestamp = await fetchLatestAcSubmissionTimestamp(slugGuess);
+          await syncProblemToSheet(question, langName, { owner, repo, filePath: p.path, solvedTimestamp });
           state.imported += 1;
         } else {
           state.skipped += 1; // couldn't confidently match this filename to a LeetCode problem
@@ -1528,7 +1605,7 @@ async function recordSyncStatus({ ok, frontendId, title, message }) {
   }
 }
 
-async function pushToGitHub(titleSlug, question, code, langName, { updateReadmeAfter = true, updateSheetAfter = true } = {}) {
+async function pushToGitHub(titleSlug, question, code, langName, { updateReadmeAfter = true, updateSheetAfter = true, solvedTimestamp } = {}) {
   // Record the full tag list for this problem regardless of what happens
   // next — this is what lets the README checklist reflect every topic a
   // solved problem touches, not just the one folder its file lives in.
@@ -1606,7 +1683,7 @@ async function pushToGitHub(titleSlug, question, code, langName, { updateReadmeA
     // update, not a full-file rewrite, so it runs per-problem even during
     // bulk import rather than being batched like the README.
     if (updateSheetAfter) {
-      await syncProblemToSheet(question, langName, { owner, repo, filePath });
+      await syncProblemToSheet(question, langName, { owner, repo, filePath, solvedTimestamp });
     }
 
     await recordSyncStatus({
