@@ -10,10 +10,10 @@ window.addEventListener("message", (event) => {
   if (event.data?.source !== "leetcode-github-sync") return;
 
   if (event.data.type === "ACCEPTED") {
-    console.log("Kodelith: Accepted submission detected!", event.data.payload);
+    console.log("QodVryn: Accepted submission detected!", event.data.payload);
 
     if (!event.data.submissionId || !event.data.titleSlug) {
-      console.log("Kodelith: missing submissionId/titleSlug, skipping.");
+      console.log("QodVryn: missing submissionId/titleSlug, skipping.");
       return;
     }
 
@@ -26,4 +26,4 @@ window.addEventListener("message", (event) => {
   }
 });
 
-console.log("Kodelith: content script loaded, listening for Accepted submissions.");
+console.log("QodVryn: content script loaded, listening for Accepted submissions.");
