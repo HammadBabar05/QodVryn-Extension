@@ -53,5 +53,5 @@
     return response;
   };
 
-  console.log("LeetCode GitHub Sync: fetch interceptor installed.");
+  console.log("QodVryn: fetch interceptor installed.");
 })();
