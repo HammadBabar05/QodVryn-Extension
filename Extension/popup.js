@@ -1,4 +1,4 @@
-console.log("Kodelith: popup loaded.");
+console.log("QodVryn: popup loaded.");
 
 // Checks the LeetCode session directly (via the extension's own cookie-based
 // access), independent of which tab is currently active — so this works
@@ -30,21 +30,44 @@ chrome.storage.local.get(["githubToken", "githubRepo"], (result) => {
 // Show what happened on the most recent submission sync, so the user isn't
 // guessing whether it worked without opening DevTools. Also clear the icon
 // badge now that they've actually seen the result.
-chrome.storage.local.get(["lastSync"], (result) => {
-  const s = result.lastSync;
+function renderLastSync(s) {
+  lastSyncDiv.innerHTML = ""; // clear previous content
+
+  const label = document.createElement("div");
+  label.className = "label";
+  label.textContent = "🕒 Last Sync";
+  lastSyncDiv.appendChild(label);
+
   if (!s) {
-    lastSyncDiv.innerHTML = `<div class="label">🕒 Last Sync</div><div>No submissions synced yet.</div>`;
+    const empty = document.createElement("div");
+    empty.textContent = "No submissions synced yet.";
+    lastSyncDiv.appendChild(empty);
     return;
   }
-  const icon = s.ok ? "✅" : "❌";
-  const color = s.ok ? "#2ea44f" : "#d73a49";
+
   const when = new Date(s.timestamp).toLocaleString();
-  lastSyncDiv.innerHTML = `
-    <div class="label">🕒 Last Sync</div>
-    <div style="color:${color}">${icon} <span class="title">${s.title || ""}</span></div>
-    <div>${s.message || ""}</div>
-    <div class="time">${when}</div>
-  `;
+
+  const titleLine = document.createElement("div");
+  titleLine.style.color = s.ok ? "#2ea44f" : "#d73a49";
+  titleLine.appendChild(document.createTextNode(`${s.ok ? "✅" : "❌"} `));
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "title";
+  titleSpan.textContent = s.title || "";
+  titleLine.appendChild(titleSpan);
+  lastSyncDiv.appendChild(titleLine);
+
+  const messageLine = document.createElement("div");
+  messageLine.textContent = s.message || "";
+  lastSyncDiv.appendChild(messageLine);
+
+  const timeLine = document.createElement("div");
+  timeLine.className = "time";
+  timeLine.textContent = when;
+  lastSyncDiv.appendChild(timeLine);
+}
+
+chrome.storage.local.get(["lastSync"], (result) => {
+  renderLastSync(result.lastSync);
 });
 
 // "Today's Problems" — only successful syncs (solve or resubmit) that
@@ -77,22 +100,32 @@ todaysBtn.addEventListener("click", () => {
     const now = new Date();
     const todays = history.filter((h) => h.ok && isSameLocalDay(h.timestamp, now));
 
+    todaysListDiv.innerHTML = ""; // clear previous content
+
     if (!todays.length) {
-      todaysListDiv.innerHTML = `<div class="history-item">No problems solved yet.</div>`;
+      const empty = document.createElement("div");
+      empty.className = "history-item";
+      empty.textContent = "No problems solved yet.";
+      todaysListDiv.appendChild(empty);
       return;
     }
 
-    todaysListDiv.innerHTML = todays
-      .map((h) => {
-        const when = new Date(h.timestamp).toLocaleTimeString();
-        return `
-          <div class="history-item">
-            <span class="title">${h.title || ""}</span>
-            <div class="time">${when}</div>
-          </div>
-        `;
-      })
-      .join("");
+    for (const h of todays) {
+      const item = document.createElement("div");
+      item.className = "history-item";
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "title";
+      titleSpan.textContent = h.title || "";
+      item.appendChild(titleSpan);
+
+      const timeDiv = document.createElement("div");
+      timeDiv.className = "time";
+      timeDiv.textContent = new Date(h.timestamp).toLocaleTimeString();
+      item.appendChild(timeDiv);
+
+      todaysListDiv.appendChild(item);
+    }
   });
 });
 
@@ -180,9 +213,20 @@ loadReposBtn.addEventListener("click", async () => {
       return;
     }
 
-    repoPicker.innerHTML =
-      `<option value="">— Select a repo —</option>` +
-      repos.map((r) => `<option value="${r.full_name}">${r.full_name}${r.private ? " 🔒" : ""}</option>`).join("");
+    repoPicker.innerHTML = ""; // clear previous options
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "— Select a repo —";
+    repoPicker.appendChild(placeholder);
+
+    for (const r of repos) {
+      const option = document.createElement("option");
+      option.value = r.full_name;
+      option.textContent = r.full_name + (r.private ? " 🔒" : "");
+      repoPicker.appendChild(option);
+    }
+
     repoPicker.style.display = "block";
     setStatus(`Loaded ${repos.length} repos (most recently updated).`, "#555");
   } catch (err) {
