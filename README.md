@@ -38,7 +38,7 @@ viewing recent sync activity.
 ## Features
 
 ### GitHub sync
-- Nested topic folders (e.g. `Array/HashTable/1_Two_Sum.java`), based on
+- Topic folders (e.g. `Array/1_Two_Sum.java`), based on
   each problem's actual LeetCode tags.
 - Duplicate-safe: an existing solution file for a problem is found and
   updated in place rather than duplicated; if a problem's folder changes
