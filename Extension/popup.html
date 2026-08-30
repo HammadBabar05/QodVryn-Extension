@@ -1,413 +1,888 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Kodelith</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QodVryn</title>
+
   <style>
     * { box-sizing: border-box; }
-    body {
-      width: 300px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      color: #1a1a1a;
+
+    :root {
+      --bg: #f6f8fa;
+      --card: rgba(255,255,255,.92);
+      --card-solid: #ffffff;
+      --text: #17191c;
+      --muted: #737a83;
+      --muted-2: #9aa1a9;
+      --border: #e6e9ed;
+      --green: #2da44e;
+      --green-dark: #218739;
+      --green-soft: #eaf7ed;
+      --github: #24292f;
+      --blue: #0969da;
+      --shadow: 0 10px 35px rgba(31,35,40,.08);
+      --shadow-sm: 0 2px 10px rgba(31,35,40,.06);
+      --radius: 14px;
     }
+
+    html, body { margin: 0; padding: 0; }
+
+    body {
+      width: 380px;
+      min-height: 600px;
+      padding: 14px;
+      background:
+        radial-gradient(circle at 90% 0%, rgba(45,164,78,.10), transparent 32%),
+        linear-gradient(180deg, #fbfcfd 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      font-size: 13px;
+      overflow-x: hidden;
+    }
+
+    button, input, select { font: inherit; }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease, background .16s ease, opacity .16s ease;
+    }
+
+    button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+    button:disabled { opacity: .55; cursor: default; }
+
+    /* ---------- Header ---------- */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 3px 3px 14px;
+    }
+
     .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 2px;
+      gap: 10px;
     }
-    .brand svg {
-      flex-shrink: 0;
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: #15181c;
+      box-shadow: 0 5px 16px rgba(21,24,28,.18);
     }
-    .brand h1 {
-      font-size: 17px;
-      font-weight: 700;
+
+    .brand-mark svg { width: 25px; height: 25px; }
+
+    .brand-copy h1 {
       margin: 0;
-      letter-spacing: -0.2px;
+      font-size: 17px;
+      line-height: 1.1;
+      letter-spacing: -.45px;
+      font-weight: 750;
     }
-    .brand-subtitle {
+
+    .brand-copy p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 10.5px;
+      letter-spacing: .05px;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border: 1px solid #dfe4e8;
+      border-radius: 999px;
+      background: rgba(255,255,255,.8);
+      color: #4d555e;
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 3px rgba(45,164,78,.11);
+    }
+
+    /* ---------- Hero ---------- */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 17px;
+      border-radius: var(--radius);
+      color: #fff;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(45,164,78,.36), transparent 38%),
+        linear-gradient(135deg, #171a1e 0%, #20252b 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      right: -48px;
+      bottom: -60px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 50%;
+    }
+
+    .hero-eyebrow {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 6px;
+      color: #9de0ad;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .7px;
+      text-transform: uppercase;
+    }
+
+    .hero-title {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: -.4px;
+    }
+
+    .hero-subtitle {
+      position: relative;
+      z-index: 1;
+      margin: 7px 0 14px;
+      max-width: 285px;
+      color: #b8bec6;
       font-size: 11px;
-      color: #888;
-      margin: 0 0 14px 0;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #eee;
+      line-height: 1.45;
     }
-    label {
-      display: block;
-      font-size: 12px;
-      color: #555;
-      margin-top: 10px;
-      margin-bottom: 4px;
+
+    #leetcodeStatus {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      margin: 0;
+      padding: 5px 9px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 999px;
+      background: rgba(255,255,255,.07);
+      color: #c8cdd3;
+      font-size: 10.5px;
     }
-    input {
-      width: 100%;
-      padding: 7px 8px;
-      box-sizing: border-box;
+
+    #leetcodeStatus.connected {
+      color: #9de0ad;
+      background: rgba(45,164,78,.13);
+      border-color: rgba(45,164,78,.22);
+      font-weight: 650;
+    }
+
+    /* ---------- Main cards ---------- */
+    .stack { display: grid; gap: 10px; margin-top: 10px; }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+      backdrop-filter: blur(10px);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 13px 10px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 11.5px;
+      font-weight: 750;
+      letter-spacing: -.1px;
+    }
+
+    .section-icon {
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #f1f4f6;
+      color: #424950;
       font-size: 13px;
-      border: 1px solid #d5d9dc;
-      border-radius: 5px;
-      transition: border-color 0.15s ease;
     }
-    input:focus {
-      outline: none;
-      border-color: #2ea44f;
+
+    .section-caption {
+      color: var(--muted-2);
+      font-size: 9.5px;
+      font-weight: 550;
     }
-    button {
+
+    /* ---------- GitHub ---------- */
+    #githubConnectSection { margin: 0; }
+
+    .github-body { padding: 0 13px 13px; }
+
+    #githubConnectBtn {
       width: 100%;
-      margin-top: 14px;
-      padding: 9px;
-      background: #2ea44f;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      transition: background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+      min-height: 38px;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 8px;
+      border-radius: 9px;
+      background: var(--github);
+      color: #fff;
+      font-size: 11.5px;
+      font-weight: 650;
+      box-shadow: 0 4px 12px rgba(36,41,47,.16);
     }
-    button:hover:not(:disabled) {
-      filter: brightness(1.08);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+
+    #githubConnectBtn:hover:not(:disabled) {
+      background: #30363d;
+      box-shadow: 0 6px 16px rgba(36,41,47,.19);
     }
-    button:active:not(:disabled) {
-      transform: translateY(1px);
-      filter: brightness(0.97);
-    }
-    button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-    button.secondary {
-      background: #f0f2f4;
-      color: #333;
-      margin-top: 6px;
-      font-size: 12px;
-      padding: 7px;
-    }
-    button.secondary:hover:not(:disabled) {
-      background: #e4e7ea;
-      filter: none;
-    }
-    select {
-      width: 100%;
-      padding: 7px;
-      box-sizing: border-box;
-      font-size: 12px;
-      border: 1px solid #d5d9dc;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    #leetcodeStatus {
-      font-size: 12px;
-      color: #555;
-      margin-bottom: 12px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #eee;
-    }
-    #leetcodeStatus.connected {
-      color: #1a7f37;
-      font-weight: 500;
-    }
-    #githubConnectSection {
-      margin-top: 4px;
-    }
-    #githubConnectSection .label {
-      color: #555;
-      font-weight: bold;
-      font-size: 12px;
-      margin-bottom: 6px;
-    }
-    #githubConnectBtn {
-      background: #24292f;
-    }
-    #githubConnectBtn.on {
-      background: #d73a49;
-    }
+
+    #githubConnectBtn.on { background: #cf222e; }
+
     #githubConnectStatus {
-      margin-top: 6px;
-      font-size: 12px;
-      color: #555;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 10.5px;
+      line-height: 1.35;
     }
+
     #deviceCodeBox {
       margin-top: 10px;
-      padding: 10px;
+      padding: 11px;
+      border: 1px solid #dfe5e9;
+      border-radius: 10px;
       background: #f6f8fa;
-      border-radius: 4px;
-      border: 1px solid #e1e4e8;
     }
-    .device-code-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+
+    .device-code-row { display: flex; align-items: center; gap: 7px; }
+
     .device-code {
-      font-family: monospace;
-      font-size: 18px;
-      font-weight: bold;
+      flex: 1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 17px;
+      font-weight: 750;
       letter-spacing: 2px;
       color: #24292f;
     }
+
+    #copyDeviceCodeBtn { width: auto; margin: 0; }
+
     #deviceCodeBox a {
       display: inline-block;
       margin-top: 8px;
-      font-size: 12px;
-      color: #0366d6;
+      color: var(--blue);
+      font-size: 10.5px;
+      text-decoration: none;
     }
+
+    #deviceCodeBox a:hover { text-decoration: underline; }
+
     #deviceFlowStatusText {
       margin-top: 6px;
-      font-size: 11px;
-      color: #777;
+      color: var(--muted);
+      font-size: 10px;
     }
-    #manualTokenDetails {
-      margin-top: 14px;
-      font-size: 12px;
-    }
-    #manualTokenDetails summary {
-      color: #777;
-      cursor: pointer;
-    }
-    #status {
-      margin-top: 8px;
-      font-size: 12px;
-      color: green;
-    }
-    #lastSync {
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid #eee;
-      font-size: 12px;
-    }
-    #lastSync .label {
-      color: #555;
-      font-weight: bold;
-      margin-bottom: 4px;
-    }
-    #lastSync .title {
-      font-weight: bold;
-    }
-    #lastSync .time {
-      color: #888;
-      font-size: 11px;
-      margin-top: 2px;
-    }
-    #todaysProblemsList {
-      margin-top: 10px;
-      max-height: 160px;
-      overflow-y: auto;
-    }
-    .history-item {
-      padding: 6px 0;
-      border-bottom: 1px solid #f0f0f0;
-      font-size: 11px;
-    }
-    .history-item .title {
-      font-weight: bold;
-    }
-    .history-item .time {
-      color: #888;
-    }
-    #todaysProblemsBtn {
-      background: none;
-      color: #0366d6;
-      border: none;
-      padding: 0;
-      margin-top: 8px;
-      width: auto;
-      font-size: 11px;
-      cursor: pointer;
-      text-decoration: underline;
-    }
-    #importSection {
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid #eee;
-    }
-    #importSection .label {
-      color: #555;
-      font-weight: bold;
-      font-size: 12px;
-      margin-bottom: 6px;
-    }
-    #importBtn {
-      background: #24292f;
-    }
-    #importBtn.cancel {
-      background: #d73a49;
-    }
-    #importProgressWrap {
-      margin-top: 10px;
-      display: none;
-    }
-    #importProgressBar {
-      width: 100%;
-      height: 6px;
-      background: #eee;
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    #importProgressBar > div {
-      height: 100%;
-      background: #2ea44f;
-      width: 0%;
-    }
-    #importStatusText {
-      margin-top: 6px;
-      font-size: 11px;
-      color: #555;
-    }
-    #sheetsSection {
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid #eee;
-    }
-    #sheetsSection .label {
-      color: #555;
-      font-weight: bold;
-      font-size: 12px;
-      margin-bottom: 6px;
-    }
-    .sheets-desc {
-      font-size: 11px;
-      color: #777;
-      margin-bottom: 8px;
-      line-height: 1.4;
-    }
-    #sheetsBtn {
-      background: #0f9d58;
-    }
-    #sheetsBtn.on {
-      background: #d73a49;
-    }
-    #sheetsStatusText {
-      margin-top: 8px;
-      font-size: 12px;
-    }
-    #sheetsStatusText a {
-      color: #0366d6;
-    }
-    #sheetsBackfillPrompt {
-      margin-top: 10px;
-      padding: 10px;
-      background: #fff8e6;
-      border: 1px solid #f0d999;
-      border-radius: 5px;
-      font-size: 12px;
-      line-height: 1.4;
-    }
-    .backfill-actions {
+
+    #cancelDeviceFlowBtn { margin-top: 9px; }
+
+    /* ---------- Settings ---------- */
+    .settings-body { padding: 0 13px 13px; }
+
+    .field { margin-top: 10px; }
+    .field:first-child { margin-top: 0; }
+
+    label {
       display: flex;
-      gap: 8px;
-      margin-top: 8px;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 5px;
+      color: #535a62;
+      font-size: 10.5px;
+      font-weight: 650;
     }
-    .backfill-actions button {
+
+    .field-hint {
+      color: #9aa1a9;
+      font-size: 9px;
+      font-weight: 500;
+    }
+
+    input, select {
+      width: 100%;
+      height: 35px;
+      padding: 0 10px;
+      border: 1px solid #dfe3e7;
+      border-radius: 8px;
+      outline: none;
+      background: #fff;
+      color: #25292e;
+      font-size: 11px;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    input::placeholder { color: #a5abb2; }
+
+    input:focus, select:focus {
+      border-color: #7dc58d;
+      box-shadow: 0 0 0 3px rgba(45,164,78,.10);
+    }
+
+    .settings-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+
+    #saveBtn {
+      width: 100%;
+      min-height: 36px;
+      margin: 0;
+      border-radius: 8px;
+      background: var(--green);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    #saveBtn:hover:not(:disabled) {
+      background: var(--green-dark);
+      box-shadow: 0 5px 14px rgba(45,164,78,.18);
+    }
+
+    #loadReposBtn { margin: 0; }
+
+    #status {
+      min-height: 13px;
+      margin-top: 7px;
+      color: var(--green-dark);
+      font-size: 9.5px;
+      font-weight: 600;
+    }
+
+    .secondary {
+      width: 100%;
+      min-height: 34px;
       margin-top: 0;
+      padding: 0 10px;
+      border: 1px solid #dfe3e7;
+      border-radius: 8px;
+      background: #f5f7f9;
+      color: #444b53;
+      font-size: 10.5px;
+      font-weight: 600;
     }
-    #sheetsBackfillProgressWrap {
+
+    .secondary:hover:not(:disabled) {
+      background: #edf0f2;
+      border-color: #d4d9de;
+      box-shadow: none;
+    }
+
+    #repoPicker { margin-top: 7px; }
+
+    #manualTokenDetails {
       margin-top: 10px;
+      padding-top: 9px;
+      border-top: 1px dashed #e4e7ea;
+      font-size: 10px;
     }
+
+    #manualTokenDetails summary {
+      color: #737a83;
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+    }
+
+    #manualTokenDetails summary::-webkit-details-marker { display: none; }
+    #manualTokenDetails summary::before { content: "›"; margin-right: 6px; font-size: 13px; }
+    #manualTokenDetails[open] summary::before { content: "⌄"; }
+
+    #manualTokenDetails label { margin-top: 9px; }
+
+    /* ---------- Sync overview ---------- */
+    .sync-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 0 13px 13px;
+    }
+
+    .stat {
+      padding: 11px;
+      border: 1px solid #edf0f2;
+      border-radius: 10px;
+      background: #fbfcfd;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      margin-top: 5px;
+      font-size: 17px;
+      line-height: 1;
+      font-weight: 750;
+      letter-spacing: -.4px;
+    }
+
+    .stat-note {
+      margin-top: 4px;
+      color: #9aa1a9;
+      font-size: 8.5px;
+    }
+
+    #lastSync {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      font-size: 10px;
+    }
+
+    #lastSync:empty { display: none; }
+
+    #lastSync .label {
+      color: var(--muted);
+      font-weight: 650;
+      margin-bottom: 3px;
+    }
+
+    #lastSync .title { font-weight: 700; }
+    #lastSync .time { color: var(--muted-2); font-size: 9px; margin-top: 2px; }
+
+    /* ---------- Today's problems ---------- */
+    .activity-card { padding-bottom: 11px; }
+
+    #todaysProblemsBtn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: calc(100% - 26px);
+      margin: 0 13px;
+      padding: 9px 10px;
+      border: 1px solid #e8ebee;
+      border-radius: 9px;
+      background: #fbfcfd;
+      color: #444b53;
+      text-align: left;
+      text-decoration: none;
+      font-size: 10.5px;
+      font-weight: 650;
+    }
+
+    #todaysProblemsBtn::after { content: "›"; font-size: 16px; color: #9aa1a9; }
+    #todaysProblemsBtn:hover { background: #f5f7f8; border-color: #dfe3e7; }
+
+    #todaysProblemsList {
+      margin: 8px 13px 0;
+      max-height: 155px;
+      overflow-y: auto;
+      border-top: 1px solid #eef0f2;
+    }
+
+    #todaysProblemsList::-webkit-scrollbar { width: 4px; }
+    #todaysProblemsList::-webkit-scrollbar-thumb { background: #d9dde1; border-radius: 10px; }
+
+    .history-item {
+      padding: 8px 2px;
+      border-bottom: 1px solid #f0f2f4;
+      font-size: 10px;
+    }
+
+    .history-item .title { font-weight: 700; }
+    .history-item .time { margin-top: 2px; color: var(--muted-2); font-size: 9px; }
+
+    /* ---------- Import ---------- */
+    #importSection, #sheetsSection {
+      margin: 0;
+      padding: 0 13px 13px;
+      border: 0;
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 7px;
+      align-items: center;
+    }
+
+    #importBtn, #sheetsBtn {
+      width: 100%;
+      min-height: 37px;
+      margin: 0;
+      border-radius: 9px;
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+
+    #importBtn { background: #24292f; }
+    #importBtn:hover:not(:disabled) { background: #30363d; box-shadow: 0 5px 14px rgba(36,41,47,.15); }
+    #importBtn.cancel { background: #cf222e; }
+
+    .section-description {
+      margin: -2px 0 9px;
+      color: var(--muted);
+      font-size: 9.5px;
+      line-height: 1.45;
+    }
+
+    #importProgressWrap { margin-top: 9px; display: none; }
+
+    #importProgressBar,
     #sheetsBackfillProgressBar {
       width: 100%;
-      height: 6px;
-      background: #eee;
-      border-radius: 3px;
+      height: 7px;
       overflow: hidden;
+      border-radius: 999px;
+      background: #e9edf0;
     }
+
+    #importProgressBar > div,
     #sheetsBackfillProgressBar > div {
       height: 100%;
-      background: #0f9d58;
       width: 0%;
-      transition: width 0.2s ease;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #2da44e, #54c96f);
+      transition: width .25s ease;
     }
-    #sheetsBackfillStatusText {
+
+    #importStatusText, #sheetsBackfillStatusText {
       margin-top: 6px;
+      color: var(--muted);
+      font-size: 9.5px;
+    }
+
+    #forceReimportBtn { margin-top: 7px; }
+
+    /* ---------- Sheets ---------- */
+    .integration-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .integration-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 11px;
-      color: #555;
+      font-weight: 700;
+    }
+
+    .integration-logo {
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #eaf7ed;
+      font-size: 13px;
+    }
+
+    #sheetsBtn {
+      background: #188038;
+      min-height: 35px;
+    }
+
+    #sheetsBtn:hover:not(:disabled) {
+      background: #137333;
+      box-shadow: 0 5px 14px rgba(24,128,56,.16);
+    }
+
+    #sheetsBtn.on { background: #cf222e; }
+
+    #sheetsStatusText {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 9.5px;
+    }
+
+    #sheetsStatusText a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    #sheetsStatusText a:hover { text-decoration: underline; }
+
+    #sheetsBackfillPrompt {
+      margin-top: 9px;
+      padding: 10px;
+      border: 1px solid #f0d999;
+      border-radius: 9px;
+      background: #fff9e9;
+      color: #685520;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .backfill-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .backfill-actions button { margin: 0; }
+
+    #sheetsBackfillProgressWrap { margin-top: 9px; }
+
+    /* ---------- Footer ---------- */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 13px 0 2px;
+      color: #a0a6ad;
+      font-size: 8.5px;
+    }
+
+    .footer strong { color: #777f88; }
+
+    /* ---------- Smooth reveal ---------- */
+    .card, .hero {
+      animation: rise .28s ease both;
+    }
+
+    .card:nth-child(2) { animation-delay: .03s; }
+    .card:nth-child(3) { animation-delay: .06s; }
+    .card:nth-child(4) { animation-delay: .09s; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
+
 <body>
-  <div class="brand">
-    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="26" height="26" rx="7" fill="#1a1a1a"/>
-      <path d="M9 8L5.5 13L9 18" stroke="#2ea44f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M17 8L20.5 13L17 18" stroke="#2ea44f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14.5 6.5L11.5 19.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
-    </svg>
-    <h1>QodVryn</h1>
-  </div>
-  <div class="brand-subtitle">LeetCode → GitHub, automatically</div>
-
-  <div id="leetcodeStatus">Checking LeetCode connection…</div>
-
-  <div id="githubConnectSection">
-    <div class="label">🔗 GitHub Connection</div>
-    <button id="githubConnectBtn">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      <span>Connect with GitHub</span>
-    </button>
-    <div id="githubConnectStatus">Not connected.</div>
-    <div id="deviceCodeBox" style="display:none;">
-      <div class="device-code-row">
-        <span id="deviceCodeText" class="device-code"></span>
-        <button type="button" id="copyDeviceCodeBtn" class="secondary">Copy</button>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect width="26" height="26" rx="7" fill="#15181c"/>
+          <path d="M9 8L5.5 13L9 18" stroke="#43D36A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M17 8L20.5 13L17 18" stroke="#43D36A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14.5 6.5L11.5 19.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
       </div>
-      <a id="deviceVerifyLink" href="#" target="_blank"></a>
-      <div id="deviceFlowStatusText"></div>
-      <button type="button" id="cancelDeviceFlowBtn" class="secondary">Cancel</button>
-    </div>
-  </div>
-
-  <details id="manualTokenDetails">
-    <summary>Advanced: paste a token manually instead</summary>
-    <label for="token">GitHub Personal Access Token</label>
-    <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxx">
-  </details>
-
-  <label for="repo">Repo (owner/repo-name)</label>
-  <input type="text" id="repo" placeholder="yourusername/your-repo">
-  <button type="button" id="loadReposBtn" class="secondary">Load My Repos</button>
-  <select id="repoPicker" style="display:none; margin-top: 8px;"></select>
-
-  <button id="saveBtn">Save Settings</button>
-  <div id="status"></div>
-
-  <div id="lastSync"></div>
-  <button id="todaysProblemsBtn">📅 Today's Problems</button>
-  <div id="todaysProblemsList" style="display:none"></div>
-
-  <div id="importSection">
-    <div class="label">📥 Sync All Submissions</div>
-    <div class="sheets-desc">Safe to click anytime — only fetches problems that are new or have changed since the last sync.</div>
-    <button id="importBtn">Import All Past Submissions</button>
-    <div id="importProgressWrap">
-      <div id="importProgressBar"><div></div></div>
-      <div id="importStatusText"></div>
-    </div>
-    <button type="button" id="forceReimportBtn" class="secondary">Force full re-check (slower, thorough)</button>
-  </div>
-
-  <div id="sheetsSection">
-    <div class="label">📊 Google Sheets Sync</div>
-    <div class="sheets-desc">Optional but recommended — logs every solved problem (ID, title, difficulty, topics, language, date) into a Google Sheet automatically. Off by default; nothing is sent to Google until you turn this on.</div>
-    <button id="sheetsBtn">Turn On Google Sheets Sync</button>
-    <div id="sheetsStatusText">Off.</div>
-    <div id="sheetsBackfillPrompt" style="display:none;">
-      <div id="sheetsBackfillMessage"></div>
-      <div class="backfill-actions">
-        <button type="button" id="sheetsBackfillYesBtn" class="secondary">Yes, add them</button>
-        <button type="button" id="sheetsBackfillNoBtn" class="secondary">No thanks</button>
+      <div class="brand-copy">
+        <h1>QodVryn</h1>
+        <p>LeetCode → GitHub automation</p>
       </div>
     </div>
-    <div id="sheetsBackfillProgressWrap" style="display:none;">
-      <div id="sheetsBackfillProgressBar"><div></div></div>
-      <div id="sheetsBackfillStatusText"></div>
-    </div>
-  </div>
+    <div class="live-pill"><span class="live-dot"></span> Ready</div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-eyebrow">Developer Workflow</div>
+    <h2 class="hero-title">Your coding history, synced.</h2>
+    <p class="hero-subtitle">Automatically organize accepted LeetCode submissions and keep your developer progress up to date.</p>
+    <div id="leetcodeStatus">Checking LeetCode connection…</div>
+  </section>
+
+  <main class="stack">
+
+    <!-- GitHub Connection -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="section-title">
+          <span class="section-icon">⌘</span>
+          GitHub Connection
+        </h3>
+        <span class="section-caption">Secure</span>
+      </div>
+
+      <div class="github-body" id="githubConnectSection">
+        <button id="githubConnectBtn">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          <span>Connect with GitHub</span>
+        </button>
+
+        <div id="githubConnectStatus">Not connected.</div>
+
+        <div id="deviceCodeBox" style="display:none;">
+          <div class="device-code-row">
+            <span id="deviceCodeText" class="device-code"></span>
+            <button type="button" id="copyDeviceCodeBtn" class="secondary">Copy</button>
+          </div>
+          <a id="deviceVerifyLink" href="#" target="_blank"></a>
+          <div id="deviceFlowStatusText"></div>
+          <button type="button" id="cancelDeviceFlowBtn" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Repository Settings -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="section-title">
+          <span class="section-icon">⚙</span>
+          Repository Settings
+        </h3>
+        <span class="section-caption">Configuration</span>
+      </div>
+
+      <div class="settings-body">
+        <details id="manualTokenDetails">
+          <summary>Advanced: use a Personal Access Token</summary>
+          <label for="token">
+            GitHub Personal Access Token
+            <span class="field-hint">Optional</span>
+          </label>
+          <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
+        </details>
+
+        <div class="field">
+          <label for="repo">
+            GitHub Repository
+            <span class="field-hint">owner/repo</span>
+          </label>
+          <input type="text" id="repo" placeholder="yourusername/your-repo">
+        </div>
+
+        <div class="settings-actions">
+          <button type="button" id="loadReposBtn" class="secondary">Load My Repos</button>
+          <button id="saveBtn" type="button">Save Settings</button>
+        </div>
+
+        <select id="repoPicker" style="display:none;"></select>
+        <div id="status"></div>
+      </div>
+    </section>
+
+    <!-- Sync Overview -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="section-title">
+          <span class="section-icon">↻</span>
+          Sync Overview
+        </h3>
+        <span class="section-caption">Live activity</span>
+      </div>
+
+      <div class="sync-grid">
+        <div class="stat">
+          <div class="stat-label">GitHub</div>
+          <div class="stat-value">●</div>
+          <div class="stat-note">Automatic sync</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Last activity</div>
+          <div id="lastSync"></div>
+          <div class="stat-note">Latest submission</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Activity -->
+    <section class="card activity-card">
+      <div class="card-header">
+        <h3 class="section-title">
+          <span class="section-icon">✓</span>
+          Recent Activity
+        </h3>
+        <span class="section-caption">Today</span>
+      </div>
+
+      <button id="todaysProblemsBtn" type="button">Today's Problems</button>
+      <div id="todaysProblemsList" style="display:none"></div>
+    </section>
+
+    <!-- Import -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="section-title">
+          <span class="section-icon">↓</span>
+          Sync History
+        </h3>
+        <span class="section-caption">Backfill</span>
+      </div>
+
+      <div id="importSection">
+        <div class="section-description">
+          Safely import your past submissions. Existing files are skipped unless they changed.
+        </div>
+
+        <button id="importBtn" type="button">Import All Past Submissions</button>
+
+        <div id="importProgressWrap">
+          <div id="importProgressBar"><div></div></div>
+          <div id="importStatusText"></div>
+        </div>
+
+        <button type="button" id="forceReimportBtn" class="secondary">Force full re-check</button>
+      </div>
+    </section>
+
+    <!-- Google Sheets -->
+    <section class="card">
+      <div class="card-header">
+        <div class="integration-line" style="width:100%; margin:0;">
+          <h3 class="section-title">
+            <span class="section-icon">▦</span>
+            Google Sheets
+          </h3>
+          <span class="section-caption">Optional</span>
+        </div>
+      </div>
+
+      <div id="sheetsSection">
+        <div class="section-description">
+          Log solved problems with ID, title, difficulty, topics, language and date.
+        </div>
+
+        <button id="sheetsBtn" type="button">Turn On Google Sheets Sync</button>
+        <div id="sheetsStatusText">Off.</div>
+
+        <div id="sheetsBackfillPrompt" style="display:none;">
+          <div id="sheetsBackfillMessage"></div>
+          <div class="backfill-actions">
+            <button type="button" id="sheetsBackfillYesBtn" class="secondary">Yes, add them</button>
+            <button type="button" id="sheetsBackfillNoBtn" class="secondary">No thanks</button>
+          </div>
+        </div>
+
+        <div id="sheetsBackfillProgressWrap" style="display:none;">
+          <div id="sheetsBackfillProgressBar"><div></div></div>
+          <div id="sheetsBackfillStatusText"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>QodVryn</span>
+    <span>•</span>
+    <strong>LeetCode → GitHub</strong>
+  </footer>
 
   <script src="popup.js"></script>
 </body>
