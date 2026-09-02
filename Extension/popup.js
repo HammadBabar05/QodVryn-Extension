@@ -1,11 +1,25 @@
 console.log("QodVryn: popup loaded.");
 
+// Wraps chrome.runtime.sendMessage and reads chrome.runtime.lastError so
+// Chrome never logs an "Unchecked runtime.lastError" console warning. This
+// is purely cosmetic (e.g. the popup closing mid-request) — every caller
+// below already handles a missing/undefined response gracefully, so there's
+// nothing to actually recover from, just noise to avoid.
+function safeSendMessage(message, callback) {
+  chrome.runtime.sendMessage(message, (response) => {
+    if (chrome.runtime.lastError) {
+      return; // expected in normal use — e.g. popup closed mid-request
+    }
+    if (callback) callback(response);
+  });
+}
+
 // Checks the LeetCode session directly (via the extension's own cookie-based
 // access), independent of which tab is currently active — so this works
 // even if LeetCode isn't the tab in front, as long as the user is logged in
 // somewhere in this browser.
 const leetcodeStatusDiv = document.getElementById("leetcodeStatus");
-chrome.runtime.sendMessage(
+safeSendMessage(
   { type: "GET_LEETCODE_CONNECTION_STATUS" },
   (result) => {
     if (result && result.connected) {
@@ -148,11 +162,33 @@ function setStatus(text, color) {
   statusDiv.textContent = text;
 }
 
-// Basic "owner/repo" shape check before we even hit the network.
-function parseRepo(githubRepo) {
+// Basic "owner/repo" shape check before we even hit the network. Tolerant
+// of a pasted full GitHub URL (a very common way to "enter a repo"), and
+// validates against the character set GitHub actually allows for
+// usernames/orgs and repo names, so a typo produces a clear message here
+// instead of a confusing 404 from the GitHub API later.
+function parseRepo(githubRepoRaw) {
+  let githubRepo = githubRepoRaw.trim();
+
+  // Tolerate a pasted URL like "https://github.com/owner/repo" or
+  // "github.com/owner/repo(.git)" by stripping it down to "owner/repo".
+  githubRepo = githubRepo
+    .replace(/^https?:\/\//i, "")
+    .replace(/^github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, ""); // trailing slash
+
   const parts = githubRepo.split("/").map((p) => p.trim());
   if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
-  return { owner: parts[0], repo: parts[1] };
+
+  const [owner, repo] = parts;
+  // GitHub usernames/orgs: alphanumeric + single hyphens, no leading/trailing hyphen.
+  const validOwner = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(owner);
+  // GitHub repo names: alphanumeric, dot, hyphen, underscore.
+  const validRepo = /^[a-zA-Z0-9._-]+$/.test(repo);
+  if (!validOwner || !validRepo) return null;
+
+  return { owner, repo };
 }
 
 // Confirms the token is valid AND has write access to this specific repo,
@@ -289,7 +325,10 @@ saveBtn.addEventListener("click", async () => {
 
   const parsed = parseRepo(githubRepo);
   if (!parsed) {
-    setStatus('Repo must be in "owner/repo-name" format.', "red");
+    setStatus(
+      'Please enter the repo as "owner/repo-name" (e.g. "octocat/hello-world").',
+      "red",
+    );
     return;
   }
 
@@ -378,7 +417,7 @@ function renderImportState(state) {
 
 // Reflect the current state as soon as the popup opens — the import may
 // have been started from a previous popup session and still be running.
-chrome.runtime.sendMessage(
+safeSendMessage(
   { type: "GET_HISTORY_IMPORT_STATE" },
   renderImportState,
 );
@@ -410,7 +449,7 @@ function startImport(force) {
 // cheaply (no gate/confirmation needed), so there's no reason to make the
 // user click through an "already imported" message first.
 importBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
+  safeSendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
     if (state && state.status === "running") {
       chrome.runtime.sendMessage({ type: "CANCEL_HISTORY_IMPORT" });
       return;
@@ -424,7 +463,7 @@ importBtn.addEventListener("click", () => {
 // right before pointing this at a "real" repo), not everyday syncing.
 const forceReimportBtn = document.getElementById("forceReimportBtn");
 forceReimportBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
+  safeSendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
     if (state && state.status === "running") {
       setStatus("An import is already running — cancel it first.", "red");
       return;
@@ -480,10 +519,10 @@ function renderSheetsState(state) {
   }
 }
 
-chrome.runtime.sendMessage({ type: "GET_SHEETS_STATE" }, renderSheetsState);
+safeSendMessage({ type: "GET_SHEETS_STATE" }, renderSheetsState);
 
 sheetsBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "GET_SHEETS_STATE" }, (state) => {
+  safeSendMessage({ type: "GET_SHEETS_STATE" }, (state) => {
     const turningOn = !(state && state.enabled);
 
     sheetsBtn.disabled = true;
@@ -491,7 +530,7 @@ sheetsBtn.addEventListener("click", () => {
       ? "Connecting to Google…"
       : "Turning off…";
 
-    chrome.runtime.sendMessage(
+    safeSendMessage(
       { type: "TOGGLE_GOOGLE_SHEETS", enable: turningOn },
       (result) => {
         sheetsBtn.disabled = false;
@@ -499,7 +538,7 @@ sheetsBtn.addEventListener("click", () => {
           sheetsStatusText.textContent = `Couldn't connect: ${result.message || "unknown error"}`;
           return;
         }
-        chrome.runtime.sendMessage(
+        safeSendMessage(
           { type: "GET_SHEETS_STATE" },
           renderSheetsState,
         );
@@ -554,7 +593,7 @@ function renderSheetsBackfillState(state) {
 }
 
 // Restore progress if a backfill was left running when the popup closed.
-chrome.runtime.sendMessage(
+safeSendMessage(
   { type: "GET_SHEETS_BACKFILL_STATE" },
   renderSheetsBackfillState,
 );
@@ -606,7 +645,7 @@ function showDeviceCodeBox(user_code, verification_uri) {
   githubConnectBtn.disabled = true;
 }
 
-chrome.runtime.sendMessage(
+safeSendMessage(
   { type: "GET_GITHUB_CONNECTION_STATE" },
   renderGithubConnectionState,
 );
@@ -615,7 +654,7 @@ chrome.runtime.sendMessage(
 // verification link in a new tab, which closes this popup) and hasn't
 // resolved yet, restore the code box on reopen instead of just showing
 // "Not connected" and confusing them.
-chrome.runtime.sendMessage(
+safeSendMessage(
   { type: "GET_GITHUB_DEVICE_FLOW_STATE" },
   (state) => {
     if (state && state.status === "pending") {
@@ -625,11 +664,11 @@ chrome.runtime.sendMessage(
 );
 
 githubConnectBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage(
+  safeSendMessage(
     { type: "GET_GITHUB_CONNECTION_STATE" },
     (state) => {
       if (state && state.connected) {
-        chrome.runtime.sendMessage({ type: "DISCONNECT_GITHUB" }, () => {
+        safeSendMessage({ type: "DISCONNECT_GITHUB" }, () => {
           renderGithubConnectionState({ connected: false });
         });
         return;
