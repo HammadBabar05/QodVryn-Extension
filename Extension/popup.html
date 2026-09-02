@@ -724,6 +724,12 @@
           </svg>
           <span>Connect with GitHub</span>
         </button>
+        <div class="section-description">
+          This grants access to all of your repositories (GitHub's Device
+          Flow doesn't support limiting scope to a single repo). For access
+          scoped to only one repository, use a
+          <strong>fine-grained Personal Access Token</strong> below instead.
+        </div>
 
         <div id="githubConnectStatus">Not connected.</div>
 
@@ -752,6 +758,12 @@
       <div class="settings-body">
         <details id="manualTokenDetails">
           <summary>Advanced: use a Personal Access Token</summary>
+          <div class="section-description">
+            For the most private option, create a
+            <strong>fine-grained token</strong> on GitHub scoped to just this
+            one repository with "Contents" read/write permission, instead of
+            using "Connect with GitHub" above.
+          </div>
           <label for="token">
             GitHub Personal Access Token
             <span class="field-hint">Optional</span>
@@ -883,6 +895,11 @@
     <span>•</span>
     <strong>LeetCode → GitHub</strong>
   </footer>
+  <div class="section-description" style="margin: -6px 14px 10px;">
+    Your generated README embeds a LeetCode stats-card image from a
+    third-party service (leetcard.jacoblin.cool), which sees your public
+    LeetCode username when the README is viewed on GitHub.
+  </div>
 
   <script src="popup.js"></script>
 </body>
