@@ -6,6 +6,11 @@
 // that can lag behind the real submission state.
 
 window.addEventListener("message", (event) => {
+  // Defense-in-depth: the content script only ever runs on leetcode.com
+  // (see manifest.json "matches"), so this should always be true anyway —
+  // but checking it explicitly means we never act on a message from an
+  // unexpected origin even if that assumption is ever violated.
+  if (event.origin !== "https://leetcode.com") return;
   if (event.source !== window) return;
   if (event.data?.source !== "leetcode-github-sync") return;
 
