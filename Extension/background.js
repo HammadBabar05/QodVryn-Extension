@@ -1,6 +1,23 @@
 // This runs in the background, independent of any specific page.
 console.log("QodVryn: background service worker loaded.");
 
+// ---------------------------------------------------------------------------
+// Storage mutex — chrome.storage.local.get(...) -> mutate -> set(...) is not
+// atomic. If two async flows do this for the same key at nearly the same
+// time (e.g. a live "Accepted" push firing while a history import is
+// running), the second write can silently clobber the first's read,
+// losing an update. This tiny queue makes every "read, modify, write"
+// storage helper below run one-at-a-time instead of overlapping, so no
+// update is ever lost to a race. Cheap and safe: these calls are
+// infrequent (per-submission), never hot-path/high-frequency.
+let storageMutexTail = Promise.resolve();
+function withStorageLock(fn) {
+  const run = storageMutexTail.then(fn, fn); // run fn regardless of prior success/failure
+  // Keep chaining, but never let a rejection break the queue for future callers.
+  storageMutexTail = run.catch(() => {});
+  return run;
+}
+
 const GRAPHQL_URL = "https://leetcode.com/graphql";
 
 // --- Get the CSRF token LeetCode uses for authenticated requests ---
@@ -10,19 +27,47 @@ async function getCsrfToken() {
 }
 
 // --- Generic GraphQL request helper (mirrors our Python script's approach) ---
-async function graphqlRequest(query, variables) {
+// Retries transient failures (network errors, LeetCode 5xx/429) with
+// increasing delays — same philosophy as githubRequest below, so a momentary
+// hiccup on LeetCode's side doesn't fail an otherwise-healthy sync.
+async function graphqlRequest(query, variables, attempt = 1) {
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAYS_MS = [1000, 2000, 4000];
+
   const csrfToken = await getCsrfToken();
 
-  const response = await fetch(GRAPHQL_URL, {
-    method: "POST",
-    credentials: "include", // sends LeetCode's session cookies automatically
-    headers: {
-      "Content-Type": "application/json",
-      "x-csrftoken": csrfToken || "",
-      "Referer": "https://leetcode.com",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let response;
+  try {
+    response = await fetch(GRAPHQL_URL, {
+      method: "POST",
+      credentials: "include", // sends LeetCode's session cookies automatically
+      headers: {
+        "Content-Type": "application/json",
+        "x-csrftoken": csrfToken || "",
+        "Referer": "https://leetcode.com",
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (networkErr) {
+    // fetch() itself threw — offline, DNS failure, connection reset, etc.
+    if (attempt < MAX_ATTEMPTS) {
+      console.error(`LeetCode GraphQL network error, retrying (attempt ${attempt}):`, networkErr);
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt - 1]));
+      return graphqlRequest(query, variables, attempt + 1);
+    }
+    throw networkErr;
+  }
+
+  const isTransientServerError = response.status >= 500 || response.status === 429;
+  if (isTransientServerError && attempt < MAX_ATTEMPTS) {
+    console.error(`LeetCode GraphQL request failed (${response.status}), retrying (attempt ${attempt})`);
+    await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt - 1]));
+    return graphqlRequest(query, variables, attempt + 1);
+  }
+
+  if (!response.ok) {
+    throw new Error(`LeetCode GraphQL request failed: ${response.status}`);
+  }
 
   const result = await response.json();
   if (result.errors) {
@@ -575,7 +620,14 @@ async function startHistoryImport(force = false) {
   // lets a normal (non-force) run correctly notice a resubmission or
   // language change that happened while the extension was off, instead of
   // treating "a file already exists" as good enough forever.
+  // This is a point-in-time snapshot used for lookups during the run; it's
+  // fine if it goes slightly stale mid-run (worst case: one extra re-check),
+  // since actual persistence uses mergeProblemSyncTimestamps() below, which
+  // only ever writes the specific keys THIS run touches (touchedTimestamps),
+  // re-reading storage fresh each time — so it can never clobber a
+  // concurrent live push's update to storage.
   const { problemSyncTimestamps = {} } = await chrome.storage.local.get(["problemSyncTimestamps"]);
+  const touchedTimestamps = {};
 
   // Only used as a fallback for problems this cache has never seen (e.g. a
   // fresh install pointed at a repo populated by an earlier install, or by
@@ -638,6 +690,7 @@ async function startHistoryImport(force = false) {
           // timestamp now so future runs use the fast path directly instead
           // of repeating the existence-check fallback every time.
           problemSyncTimestamps[sub.titleSlug] = subTimestamp;
+          touchedTimestamps[sub.titleSlug] = subTimestamp;
           processedSet.add(sub.titleSlug);
           continue;
         }
@@ -651,12 +704,13 @@ async function startHistoryImport(force = false) {
         });
 
         problemSyncTimestamps[sub.titleSlug] = subTimestamp;
+        touchedTimestamps[sub.titleSlug] = subTimestamp;
         processedSet.add(sub.titleSlug);
         state.processedSlugs = Array.from(processedSet);
         if (result.ok) state.imported += 1;
         else state.failed += 1;
         await saveHistoryImportState(state);
-        await chrome.storage.local.set({ problemSyncTimestamps });
+        await mergeProblemSyncTimestamps(touchedTimestamps);
 
         await new Promise((r) => setTimeout(r, HISTORY_IMPORT_DELAY_MS));
       }
@@ -674,7 +728,7 @@ async function startHistoryImport(force = false) {
     state.status = "completed";
     state.currentTitle = null;
     await saveHistoryImportState(state);
-    await chrome.storage.local.set({ problemSyncTimestamps });
+    await mergeProblemSyncTimestamps(touchedTimestamps);
 
     // Final pass to be certain the README reflects everything imported.
     await updateReadme(owner, repo, githubToken);
@@ -688,7 +742,7 @@ async function startHistoryImport(force = false) {
     state.status = "error";
     state.lastError = err.message || String(err);
     await saveHistoryImportState(state);
-    await chrome.storage.local.set({ problemSyncTimestamps });
+    await mergeProblemSyncTimestamps(touchedTimestamps);
   }
 }
 
@@ -826,13 +880,25 @@ async function getFileSha(owner, repo, filePath, token) {
   return data.sha;
 }
 
-async function putFile(owner, repo, filePath, contentBase64, message, sha, token) {
+// A 409 here means the file's SHA we sent is stale — most commonly because
+// another push to this exact same file landed a moment earlier (e.g. a live
+// solve and a history-import pass touching the same problem at nearly the
+// same time). That's recoverable: refetch the file's current SHA and retry
+// the write once with it, instead of failing the sync outright.
+async function putFile(owner, repo, filePath, contentBase64, message, sha, token, allowShaRetry = true) {
   const body = { message, content: contentBase64 };
   if (sha) body.sha = sha;
 
   const response = await githubRequest(
     `/repos/${owner}/${repo}/contents/${encodeGithubPath(filePath)}`, "PUT", body, token
   );
+
+  if (response.status === 409 && allowShaRetry) {
+    console.error(`GitHub push got a 409 (stale SHA) for "${filePath}" — refetching SHA and retrying once.`);
+    const freshSha = await getFileSha(owner, repo, filePath, token);
+    return putFile(owner, repo, filePath, contentBase64, message, freshSha, token, false);
+  }
+
   if (!response.ok) {
     const errText = await response.text();
     throw new Error(`GitHub push failed (${response.status}): ${errText}`);
@@ -876,14 +942,16 @@ async function cleanupOldFile(owner, repo, oldFilePath, sha, message, token, fro
 }
 
 async function recordFailedCleanup(filePath, frontendId, errorMessage) {
-  const { failedCleanups = [] } = await chrome.storage.local.get(["failedCleanups"]);
-  failedCleanups.push({
-    filePath,
-    frontendId,
-    error: errorMessage,
-    timestamp: new Date().toISOString(),
+  await withStorageLock(async () => {
+    const { failedCleanups = [] } = await chrome.storage.local.get(["failedCleanups"]);
+    failedCleanups.push({
+      filePath,
+      frontendId,
+      error: errorMessage,
+      timestamp: new Date().toISOString(),
+    });
+    await chrome.storage.local.set({ failedCleanups });
   });
-  await chrome.storage.local.set({ failedCleanups });
   console.error(
     `⚠️ Duplicate file left behind for problem ${frontendId}: ${filePath}. ` +
       `Saved to chrome.storage.local["failedCleanups"] — remove it manually on GitHub for now.`
@@ -974,9 +1042,35 @@ function leetcodeTagsForFolder(folderName) {
 // the same way a hand-maintained checklist would.
 async function mergeTopicTagsCache(frontendId, topicTags) {
   if (!frontendId) return;
-  const { problemTopicTags = {} } = await chrome.storage.local.get(["problemTopicTags"]);
-  problemTopicTags[frontendId] = (topicTags || []).map((t) => t.name);
-  await chrome.storage.local.set({ problemTopicTags });
+  await withStorageLock(async () => {
+    const { problemTopicTags = {} } = await chrome.storage.local.get(["problemTopicTags"]);
+    problemTopicTags[frontendId] = (topicTags || []).map((t) => t.name);
+    await chrome.storage.local.set({ problemTopicTags });
+  });
+}
+
+// Shared, lock-protected read-modify-write for the "last synced" timestamp
+// cache — used by both the live push path and history import, so the two
+// can never race each other into losing an update.
+async function updateProblemSyncTimestamp(titleSlug, timestamp) {
+  if (!titleSlug) return;
+  await mergeProblemSyncTimestamps({ [titleSlug]: timestamp });
+}
+
+// Merges only the given {titleSlug: timestamp} entries onto whatever is
+// CURRENTLY in storage (re-read fresh, under the lock) rather than blindly
+// overwriting the whole object from a possibly-stale in-memory copy. This
+// is what lets a long-running history import periodically flush its own
+// progress without clobbering a concurrent live "Accepted" push's update to
+// a different (or even the same) titleSlug — whichever write actually runs
+// last under the lock wins, instead of one being silently lost.
+async function mergeProblemSyncTimestamps(updates) {
+  if (!updates || Object.keys(updates).length === 0) return;
+  await withStorageLock(async () => {
+    const { problemSyncTimestamps = {} } = await chrome.storage.local.get(["problemSyncTimestamps"]);
+    Object.assign(problemSyncTimestamps, updates);
+    await chrome.storage.local.set({ problemSyncTimestamps });
+  });
 }
 
 // Lists "LeetCode Problems/", then counts files inside each topic subfolder
@@ -1354,9 +1448,11 @@ async function syncProblemToSheet(question, langName, { owner, repo, filePath, s
     // happened while Sheets sync was off, not just a problem that was never
     // logged at all.
     if (question.titleSlug) {
-      const { sheetSyncTimestamps = {} } = await chrome.storage.local.get(["sheetSyncTimestamps"]);
-      sheetSyncTimestamps[question.titleSlug] = Math.floor(Date.now() / 1000);
-      await chrome.storage.local.set({ sheetSyncTimestamps });
+      await withStorageLock(async () => {
+        const { sheetSyncTimestamps = {} } = await chrome.storage.local.get(["sheetSyncTimestamps"]);
+        sheetSyncTimestamps[question.titleSlug] = Math.floor(Date.now() / 1000);
+        await chrome.storage.local.set({ sheetSyncTimestamps });
+      });
     }
   } catch (err) {
     // Sheets sync is an optional layer on top of the real push — same
@@ -1591,11 +1687,13 @@ const MAX_SYNC_HISTORY = 50;
 async function recordSyncStatus({ ok, frontendId, title, message }) {
   const entry = { ok, frontendId, title, message, timestamp: new Date().toISOString() };
 
-  const { syncHistory = [] } = await chrome.storage.local.get(["syncHistory"]);
-  syncHistory.unshift(entry); // newest first
-  if (syncHistory.length > MAX_SYNC_HISTORY) syncHistory.length = MAX_SYNC_HISTORY;
+  await withStorageLock(async () => {
+    const { syncHistory = [] } = await chrome.storage.local.get(["syncHistory"]);
+    syncHistory.unshift(entry); // newest first
+    if (syncHistory.length > MAX_SYNC_HISTORY) syncHistory.length = MAX_SYNC_HISTORY;
 
-  await chrome.storage.local.set({ lastSync: entry, syncHistory });
+    await chrome.storage.local.set({ lastSync: entry, syncHistory });
+  });
 
   try {
     chrome.action.setBadgeText({ text: ok ? "✓" : "!" });
@@ -1617,9 +1715,7 @@ async function pushToGitHub(titleSlug, question, code, langName, { updateReadmeA
   // and reprocess a genuine resubmission/language-change without ever
   // risking a false "nothing changed" skip.
   if (titleSlug) {
-    const { problemSyncTimestamps = {} } = await chrome.storage.local.get(["problemSyncTimestamps"]);
-    problemSyncTimestamps[titleSlug] = Math.floor(Date.now() / 1000);
-    await chrome.storage.local.set({ problemSyncTimestamps });
+    await updateProblemSyncTimestamp(titleSlug, Math.floor(Date.now() / 1000));
   }
 
   const { githubToken, githubRepo } = await chrome.storage.local.get(["githubToken", "githubRepo"]);
