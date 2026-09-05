@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "QodVryn",
   "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp1zAktXw+FMXeacIAY4NTkcw970EfYlmI8Z79LLECYLH3mlF/ildwaI/t+Nb/mipEsJl7XJQ7Qvn4xLIDlDzRQMpXMTEttEFidWabq0Mq35idAODXqeog7F4Q/U19qUmEDDpjbzRxJotTcvHfq8560txKYj4tPC6OGrRy8J3cibsJn4Jgkbces91A24GLSRGMmQ3YAC1IWoAV3BXKS/n+7q/0TNfvzQzSTHkg6Fn+IR9RXSU6B0c92jq5RuMAEXdlGksFcpKGnB/X3gwr+lKGL2UkbV9jt3JP7uXEvQ9MkNXZpokgZiHI90laTBe9LYmFLpedNRzcTCWUlQWteKuMwIDAQAB",
   "description": "QodVryn automatically captures your accepted LeetCode submissions and syncs them to GitHub with intelligent folder organization, automatic README progress updates, full submission history import, and optional Google Sheets tracking — keeping your coding journey organized and up to date.",
 
   "icons": {

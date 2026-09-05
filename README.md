@@ -74,6 +74,12 @@ viewing recent sync activity.
   GitHub solution for every solve.
 - Offers to backfill the sheet from your existing GitHub repo if you
   already have solutions pushed before turning Sheets on.
+- Works out of the box — you don't need to create your own Google Cloud
+  project. The extension ships with a fixed ID (see `manifest.json`'s
+  `"key"` field) so the bundled OAuth client works for every install of
+  this repo, not just the original author's. See
+  [Google Sheets quota note](#google-sheets-quota-note) below for the one
+  caveat this comes with.
 
 ### Popup dashboard
 - Live GitHub/LeetCode connection status.
@@ -91,6 +97,11 @@ extension:
 2. Open `chrome://extensions` in Chrome.
 3. Enable **Developer mode** (top right).
 4. Click **Load unpacked** and select the extension folder.
+
+> Don't remove or edit the `"key"` field in `manifest.json`. It pins the
+> extension to a fixed ID across every install, which is what lets the
+> built-in Google Sheets integration work for you without any setup of
+> your own.
 
 ## Setup
 
@@ -117,6 +128,11 @@ extension:
 | `identity` | Google OAuth for the optional Sheets integration. |
 | `host_permissions` (leetcode.com, api.github.com, github.com, sheets.googleapis.com) | Talk to LeetCode's API, push to GitHub, and write to Google Sheets. |
 
+Everything (GitHub token, Google auth token, settings) is stored locally
+via `chrome.storage.local` on your own machine — nothing is sent to any
+server other than GitHub's and Google's own APIs, directly from your
+browser.
+
 ## Known limitations
 
 - The LeetCode GraphQL API used here is unofficial and undocumented, so it
@@ -124,6 +140,25 @@ extension:
   isn't bulletproof.
 - README stats are derived from folder contents on GitHub, so a very large
   repo can make README updates slower.
+- <a name="google-sheets-quota-note"></a>**Google Sheets quota is shared
+  across every install of this repo.** The bundled Google OAuth client
+  belongs to one Google Cloud project, and Google Sheets/Drive API quotas
+  apply per-project, not per-user. If this extension gets a lot of use,
+  the shared quota could occasionally be hit, which would make the Sheets
+  feature (not GitHub sync — that's unaffected) temporarily fail for
+  everyone until it resets. If you hit this, or if you'd rather not depend
+  on a shared project at all, you can point the extension at your own free
+  Google Cloud OAuth client instead:
+  1. Create an OAuth 2.0 Client ID of type **Chrome Extension** in the
+     [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+     using this extension's fixed ID (see the `"key"` field's resulting ID
+     under `chrome://extensions`, with Developer mode on).
+  2. Enable the **Google Sheets API** and **Google Drive API** for that
+     project.
+  3. Replace the `client_id` under `oauth2` in `manifest.json` with your
+     own, then reload the extension.
+  - GitHub sync, README updates, and history import don't use this
+    OAuth client at all and are completely unaffected either way.
 
 ## Roadmap
 

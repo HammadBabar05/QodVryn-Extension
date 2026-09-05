@@ -258,7 +258,7 @@ loadReposBtn.addEventListener("click", async () => {
   if (!token) {
     setStatus(
       "Connect with GitHub above, or paste a token manually, first.",
-      "red",
+      "var(--red)",
     );
     return;
   }
@@ -269,7 +269,7 @@ loadReposBtn.addEventListener("click", async () => {
   try {
     const repos = await fetchUserRepos(token);
     if (!repos.length) {
-      setStatus("No repos found for this token.", "red");
+      setStatus("No repos found for this token.", "var(--red)");
       return;
     }
 
@@ -288,10 +288,10 @@ loadReposBtn.addEventListener("click", async () => {
     }
 
     repoPicker.style.display = "block";
-    setStatus(`Loaded ${repos.length} repos (most recently updated).`, "#555");
+    setStatus(`Loaded ${repos.length} repos (most recently updated).`, "var(--muted)");
   } catch (err) {
     console.error("Failed to load repos:", err);
-    setStatus("Couldn't load repos — check your token.", "red");
+    setStatus("Couldn't load repos — check your token.", "var(--red)");
   } finally {
     loadReposBtn.disabled = false;
     loadReposBtn.textContent = "Load My Repos";
@@ -315,11 +315,11 @@ saveBtn.addEventListener("click", async () => {
   const githubToken = manualToken || existingToken;
 
   if (!githubToken) {
-    setStatus("Connect with GitHub above, or paste a token manually.", "red");
+    setStatus("Connect with GitHub above, or paste a token manually.", "var(--red)");
     return;
   }
   if (!githubRepo) {
-    setStatus("Please enter a repo.", "red");
+    setStatus("Please enter a repo.", "var(--red)");
     return;
   }
 
@@ -327,13 +327,13 @@ saveBtn.addEventListener("click", async () => {
   if (!parsed) {
     setStatus(
       'Please enter the repo as "owner/repo-name" (e.g. "octocat/hello-world").',
-      "red",
+      "var(--red)",
     );
     return;
   }
 
   saveBtn.disabled = true;
-  setStatus("Checking token and repo access...", "#555");
+  setStatus("Checking token and repo access...", "var(--muted)");
 
   try {
     const result = await validateGithubAccess(
@@ -342,16 +342,16 @@ saveBtn.addEventListener("click", async () => {
       githubToken,
     );
     if (!result.ok) {
-      setStatus(result.message, "red");
+      setStatus(result.message, "var(--red)");
       return;
     }
 
     chrome.storage.local.set({ githubToken, githubRepo }, () => {
-      setStatus("Saved! GitHub connection verified.", "green");
+      setStatus("Saved! GitHub connection verified.", "var(--green-dark)");
     });
   } catch (err) {
     console.error("Validation request failed:", err);
-    setStatus("Network error while checking GitHub — try again.", "red");
+    setStatus("Network error while checking GitHub — try again.", "var(--red)");
   } finally {
     saveBtn.disabled = false;
   }
@@ -375,12 +375,19 @@ const importStatusText = document.getElementById("importStatusText");
 // This is honest about not knowing the total, while still giving visual
 // feedback that something is happening.
 function renderImportState(state) {
+  const detailsEl = document.getElementById("syncHistoryDetails");
+
   if (!state || state.status === "idle") {
     importBtn.textContent = "Import All Past Submissions";
     importBtn.classList.remove("cancel");
     importProgressWrap.style.display = "none";
     return;
   }
+
+  // Closed by default, but never hide an import that's actually in progress
+  // (or left paused/errored) behind a collapsed section — auto-expand so
+  // the user sees it the moment they open the popup.
+  if (detailsEl) detailsEl.open = true;
 
   const total = state.imported + state.failed;
 
@@ -432,7 +439,7 @@ chrome.runtime.onMessage.addListener((message) => {
 function startImport(force) {
   chrome.storage.local.get(["githubToken", "githubRepo"], (result) => {
     if (!result.githubToken || !result.githubRepo) {
-      setStatus("Save your GitHub token + repo above before importing.", "red");
+      setStatus("Save your GitHub token + repo above before importing.", "var(--red)");
       return;
     }
     chrome.runtime.sendMessage({ type: "START_HISTORY_IMPORT", force });
@@ -465,7 +472,7 @@ const forceReimportBtn = document.getElementById("forceReimportBtn");
 forceReimportBtn.addEventListener("click", () => {
   safeSendMessage({ type: "GET_HISTORY_IMPORT_STATE" }, (state) => {
     if (state && state.status === "running") {
-      setStatus("An import is already running — cancel it first.", "red");
+      setStatus("An import is already running — cancel it first.", "var(--red)");
       return;
     }
     startImport(true);
@@ -496,6 +503,8 @@ const sheetsBackfillStatusText = document.getElementById(
 );
 
 function renderSheetsState(state) {
+  const detailsEl = document.getElementById("sheetsDetails");
+
   if (!state || !state.enabled) {
     sheetsBtn.textContent = "Turn On Google Sheets Sync";
     sheetsBtn.classList.remove("on");
@@ -504,6 +513,11 @@ function renderSheetsState(state) {
       : "Off.";
     return;
   }
+
+  // Closed by default, but never hide an already-active integration behind
+  // a collapsed section — auto-expand so the user sees it's on.
+  if (detailsEl) detailsEl.open = true;
+
   sheetsBtn.textContent = "Turn Off Google Sheets Sync";
   sheetsBtn.classList.add("on");
   sheetsStatusText.textContent = "";
@@ -617,6 +631,7 @@ const copyDeviceCodeBtn = document.getElementById("copyDeviceCodeBtn");
 const deviceVerifyLink = document.getElementById("deviceVerifyLink");
 const deviceFlowStatusText = document.getElementById("deviceFlowStatusText");
 const cancelDeviceFlowBtn = document.getElementById("cancelDeviceFlowBtn");
+const githubStatusBadge = document.getElementById("githubStatusBadge");
 
 function renderGithubConnectionState(state) {
   deviceCodeBox.style.display = "none";
@@ -628,10 +643,14 @@ function renderGithubConnectionState(state) {
     githubConnectStatus.textContent = state.username
       ? `✅ Connected as ${state.username}`
       : "✅ Connected.";
+    githubStatusBadge.textContent = "Connected";
+    githubStatusBadge.className = "status-badge connected";
   } else {
     githubConnectBtnLabel.textContent = "Connect with GitHub";
     githubConnectBtn.classList.remove("on");
     githubConnectStatus.textContent = "Not connected.";
+    githubStatusBadge.textContent = "Not connected";
+    githubStatusBadge.className = "status-badge disconnected";
   }
 }
 
